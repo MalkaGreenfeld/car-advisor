@@ -1,0 +1,139 @@
+:host {
+  display: block;
+}
+
+fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  padding: 0;
+  margin-block-end: var(--space-1);
+  font-weight: 500;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.car-name,
+.car-key {
+  margin: 0;
+}
+
+.key-label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+// The key is one identifier, so it is not broken over two lines.
+.key-value {
+  white-space: nowrap;
+}
+
+.search {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border);
+}
+
+.query {
+  display: grid;
+  gap: var(--space-3);
+}
+
+input.numeric {
+  text-align: end;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+// Empty until a search has an answer, so that it takes no room before that.
+.status {
+  margin: 0;
+
+  &:not(:empty) {
+    margin-block-start: var(--space-3);
+  }
+}
+
+.choose {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+
+.candidate-list {
+  max-block-size: 24rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: var(--border);
+  border-radius: var(--radius);
+
+  li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+
+    &:has(input:checked) {
+      background: var(--color-surface-muted);
+    }
+
+    & + li {
+      border-block-start: var(--border);
+    }
+  }
+
+  input {
+    margin-block-start: var(--space-1);
+  }
+}
+
+.candidate {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 400;
+}
+
+.candidate-name {
+  font-weight: 500;
+}
+
+// The label and the value share a line when they fit, and the value goes under the label when not.
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: var(--space-2);
+  font-size: 0.875rem;
+
+  app-bidi-text {
+    white-space: nowrap;
+  }
+}
+
+.fact-label {
+  color: var(--color-text-muted);
+}

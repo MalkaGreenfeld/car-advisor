@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+input,
+select {
+  inline-size: 100%;
+}
+
+// The input is left to right, so its end is the right edge, under the start of the label.
+.numeric {
+  text-align: end;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}

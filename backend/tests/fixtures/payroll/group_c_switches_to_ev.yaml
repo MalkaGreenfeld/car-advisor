@@ -1,0 +1,33 @@
+profile:
+  display_name: Fictitious employee, group C
+  eligibility_group: C
+  base_salary: 14200
+  pay_components:
+    - {kind: commission, label: Sales commission, amount: 1000}
+  pension_rate_percent: 6
+  study_fund_rate_percent: 2.5
+  credit_points: 2.25
+
+scenario:
+  usage_value: 2760
+  participation: 350
+  ev_refund: 250
+  car_maintenance: 0
+
+expected:
+  gross_salary: 15200                    # 14,200 + 1,000 commission; the EV refund is paid net, not gross pay
+  taxable_usage_value: 2760              # participation does not reduce it while the flag is off
+  study_fund_taxable_excess: 0           # the employer deposit rate is 0, as in the challenge's method
+  taxable_income: 17960                  # 15,200 + 2,760
+  tax_before_credits: 2907.1             # 701; 427; 20% of 6,090 = 1,218; 31% of 1,810 = 561.1
+  credit_points_credit: 544.5            # 2.25 * 242
+  pension_credit: 232.75                 # 35% of 665; the 912 contribution is limited to 7% of the 9,500 ceiling
+  income_tax: 2129.85                    # 2,907.1 - 544.5 - 232.75
+  national_insurance: 808.8888           # 1.04% of 7,522 = 78.2288; 7% of 10,438 = 730.66
+  health_tax: 782.6052                   # 3.23% of 7,522 = 242.9606; 5.17% of 10,438 = 539.6446
+  pension_contribution: 912              # 6% of 15,200; the commission is in the base
+  study_fund_contribution: 380           # 2.5% of 15,200
+  participation: 350
+  ev_refund: 250
+  car_maintenance: 0
+  net_pay: 10086.656                     # 15,200 - 2,129.85 - 808.8888 - 782.6052 - 912 - 380 - 350 + 250

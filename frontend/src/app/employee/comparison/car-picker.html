@@ -1,0 +1,17 @@
+<label class="visually-hidden" [for]="controlId()">{{ copy.label }} {{ title() }}</label>
+<select
+  [id]="controlId()"
+  [disabled]="!enabled()"
+  [attr.aria-describedby]="note() !== null ? noteId() : null"
+  (change)="change($event)"
+>
+  @for (option of options(); track option.key) {
+    <option [value]="option.key" [selected]="option.key === car().car_key">
+      {{ option.label }}
+    </option>
+  }
+</select>
+@if (note(); as text) {
+  <p [id]="noteId()" class="note">{{ text }}</p>
+}
+<p class="note not-saved" role="status">{{ notSaved() ? copy.notSaved : '' }}</p>

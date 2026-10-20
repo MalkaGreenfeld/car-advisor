@@ -1,0 +1,101 @@
+:host {
+  display: block;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.scroll {
+  overflow-x: auto;
+  container-type: inline-size;
+}
+
+// The caption is as wide as the window onto the table, and stays at its start while the table
+// scrolls, so that a narrow screen shows all of its text.
+caption {
+  position: sticky;
+  inset-inline-start: 0;
+  inline-size: 100cqi;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+// A column narrower than this would wrap the explanation into a thin strip, so the table scrolls
+// instead.
+.column {
+  min-inline-size: 10.5rem;
+}
+
+tbody th {
+  min-inline-size: 10rem;
+  font-weight: 500;
+  background: var(--color-surface-muted);
+}
+
+td {
+  overflow-wrap: anywhere;
+}
+
+td p {
+  margin: 0;
+}
+
+td p + p,
+td ul {
+  margin-block-start: var(--space-1);
+}
+
+.numeric {
+  text-align: end;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.detail,
+.note,
+.tag {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.note {
+  display: block;
+  text-wrap: balance;
+}
+
+// The key is never broken, and its size lets it fit the narrowest column.
+.key {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+// Moves to the next line as a whole, instead of splitting the answer to "sent?".
+.tag {
+  white-space: nowrap;
+}
+
+.missing {
+  margin-block-end: 0;
+  padding-inline-start: var(--space-4);
+  font-size: 0.875rem;
+}
+
+.result th,
+.result td {
+  font-weight: 600;
+}
+
+// The line between the items that go into the calculation and what comes out of it.
+.first-result th,
+.first-result td {
+  border-block-start: 2px solid var(--color-border-strong);
+}
+
+.breakdown th {
+  padding-inline-start: var(--space-5);
+  font-weight: 400;
+}

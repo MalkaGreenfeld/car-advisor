@@ -1,0 +1,31 @@
+profile:
+  display_name: Fictitious employee, group A
+  eligibility_group: A
+  base_salary: 11000
+  pay_components:
+    - {kind: bonus, label: Monthly bonus, amount: 500}
+  pension_rate_percent: 6
+  study_fund_rate_percent: 2.5
+  credit_points: 2.25
+scenario:
+  usage_value: 3970
+  participation: 250
+  ev_refund: 0
+  car_maintenance: 0
+expected:
+  gross_salary: 11500                    # 11,000 + 500 bonus
+  taxable_usage_value: 3970              # participation does not reduce it while the flag is off
+  study_fund_taxable_excess: 0           # the employer deposit rate is 0, as in the challenge's method
+  taxable_income: 15470                  # 11,500 + 3,970
+  tax_before_credits: 2210               # 10% of 7,010 = 701; 14% of 3,050 = 427; 20% of 5,410 = 1,082
+  credit_points_credit: 544.5            # 2.25 * 242
+  pension_credit: 232.75                 # 35% of 665; the 690 contribution is limited to 7% of the 9,500 ceiling
+  income_tax: 1432.75                    # 2,210 - 544.5 - 232.75
+  national_insurance: 634.5888           # 1.04% of 7,522 = 78.2288; 7% of 7,948 = 556.36
+  health_tax: 653.8722                   # 3.23% of 7,522 = 242.9606; 5.17% of 7,948 = 410.9116
+  pension_contribution: 690              # 6% of 11,500; the bonus is in the base
+  study_fund_contribution: 287.5         # 2.5% of 11,500
+  participation: 250
+  ev_refund: 0
+  car_maintenance: 0
+  net_pay: 7551.289                      # 11,500 - 1,432.75 - 634.5888 - 653.8722 - 690 - 287.5 - 250

@@ -1,0 +1,73 @@
+# The payroll values are those of the challenge's rules file, version mock-2026-10-12. Its tables
+# are the 2025 ones, given for illustration: a pilot enters the tables of its own year.
+groups:
+  order: [A, B, C, D]                        # lowest to highest
+  budgets: {A: 3500, B: 3700, C: 4500, D: 5200}
+
+family_track:
+  children_threshold: 4                      # eligible when children up to age 23 >= threshold
+  # The gap is the car's monthly cost in the catalog minus the budget of the employee's group.
+  employer_share_percent: 50
+  employee_share_percent: 50
+
+ev_refund:
+  amount: 250
+  # net: net pay rises by exactly the amount, which is what the challenge's grossed-up refund gives
+  # the employee. The gross amount that payroll pays is not calculated.
+  # taxable_gross: the amount is taxable pay, the challenge's simple alternative.
+  mode: net                                  # net | taxable_gross
+
+unused_budget: not_paid                      # the only value the schema accepts
+
+flags:
+  participation_reduces_usage_value: false   # the challenge's tax figures match only with false
+  variable_pay_in_contribution_base: true    # commissions and bonuses count for pension and study fund
+  car_maintenance_outside_benefits_base: true
+
+payroll:
+  net_pay_method: monthly                    # the only value the schema accepts
+  income_tax:
+    source: Challenge rules file strauss-rules.json, version mock-2026-10-12 (2025 tables)
+    brackets:
+      - {above: 0,     up_to: 7010,  rate_percent: 10}
+      - {above: 7010,  up_to: 10060, rate_percent: 14}
+      - {above: 10060, up_to: 16150, rate_percent: 20}
+      - {above: 16150, up_to: 22440, rate_percent: 31}
+      - {above: 22440, up_to: 46690, rate_percent: 35}
+      - {above: 46690, up_to: 60130, rate_percent: 47}
+      - {above: 60130, up_to: null,  rate_percent: 50}
+  credit_point:
+    value: 242
+    source: Challenge rules file strauss-rules.json, version mock-2026-10-12 (2025 tables)
+  social_insurance:
+    source: Challenge rules file strauss-rules.json, version mock-2026-10-12 (2025 tables)
+    reduced_rate_threshold: 7522
+    max_insurable_income: 50695
+    national_insurance: {reduced_rate_percent: 1.04, full_rate_percent: 7}
+    health_tax: {reduced_rate_percent: 3.23, full_rate_percent: 5.17}
+  pension_credit:
+    source: Challenge rules file strauss-rules.json, version mock-2026-10-12 (2025 tables)
+    rate_percent: 35
+    # The file gives only the rate and the ceiling. The sheet's tax figures show a credit on the
+    # employee's contribution up to 7% of the ceiling.
+    qualifying_share_percent: 7
+    income_ceiling: 9500
+  study_fund:
+    # The challenge's file has no study fund parameters. The ceiling and the exempt rate matter only
+    # when employer_rate_percent is above 0, and its method adds no employer deposit to taxable pay.
+    source: https://www.kolzchut.org.il/he/%D7%A7%D7%A8%D7%9F_%D7%94%D7%A9%D7%AA%D7%9C%D7%9E%D7%95%D7%AA
+    salary_ceiling: 15712
+    exempt_employer_rate_percent: 7.5
+    employer_rate_percent: 0
+
+# A default must equal the current value of its field, or the file is rejected; edit both together.
+pending:
+  - field: ev_refund.mode
+    default: net
+    question: Does payroll gross up the refund so that the employee sees exactly 250 net, as the challenge says? The advisor adds the exact amount to net pay and does not calculate the gross amount.
+  - field: payroll.credit_point.value
+    default: 242
+    question: The tax tables are the challenge's 2025 tables, given for illustration. Strauss to confirm the tables of the pilot year; this value stands for all of them.
+  - field: payroll.study_fund.employer_rate_percent
+    default: 0
+    question: The challenge's method adds no employer study fund deposit to taxable pay. Does Strauss's payroll tax the deposit above the ceiling?

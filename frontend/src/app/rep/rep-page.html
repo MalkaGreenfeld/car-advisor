@@ -1,0 +1,70 @@
+<main class="rep-page">
+  <header class="page-header">
+    <h1>{{ copy.page.title }}</h1>
+    <button type="button" (click)="reload()">{{ copy.page.refresh }}</button>
+  </header>
+
+  <div class="status" aria-live="polite">
+    @switch (status()) {
+      @case ('loading') {
+        <p class="status-message">{{ sharedCopy.loading }}</p>
+      }
+      @case ('failed') {
+        <div class="status-message">
+          <p>{{ sharedCopy.failed }}</p>
+          <button type="button" class="button-primary" (click)="retry()">
+            {{ copy.page.retry }}
+          </button>
+        </div>
+      }
+    }
+    @if (updateFailed()) {
+      <p class="update-failed">{{ copy.updateFailed }}</p>
+    }
+    @if (confirmation(); as text) {
+      <p class="confirmation">{{ text }}</p>
+    }
+  </div>
+
+  @if (status() === 'ready') {
+    <section class="group" aria-labelledby="open-heading">
+      <h2 id="open-heading">{{ copy.groups.open }}</h2>
+      @if (openQuestions().length > 0) {
+        <ol class="questions">
+          @for (question of openQuestions(); track question.id) {
+            <li class="question">
+              <app-rep-question
+                [question]="question"
+                [formState]="formOf(question.id)"
+                (answered)="onAnswered($event)"
+                (alreadyAnswered)="onAlreadyAnswered()"
+              />
+            </li>
+          }
+        </ol>
+      } @else {
+        <p class="empty">{{ copy.empty.open }}</p>
+      }
+    </section>
+
+    <section class="group" aria-labelledby="answered-heading">
+      <h2 id="answered-heading">{{ copy.groups.answered }}</h2>
+      @if (answeredQuestions().length > 0) {
+        <ol class="questions">
+          @for (question of answeredQuestions(); track question.id) {
+            <li class="question">
+              <app-rep-question
+                [question]="question"
+                [formState]="formOf(question.id)"
+                (answered)="onAnswered($event)"
+                (alreadyAnswered)="onAlreadyAnswered()"
+              />
+            </li>
+          }
+        </ol>
+      } @else {
+        <p class="empty">{{ copy.empty.answered }}</p>
+      }
+    </section>
+  }
+</main>

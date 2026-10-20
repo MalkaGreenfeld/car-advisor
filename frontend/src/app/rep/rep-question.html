@@ -1,0 +1,84 @@
+<p class="question-text"><app-bidi-text [text]="question().question_text" /></p>
+
+<dl class="facts">
+  <div>
+    <dt>{{ copy.labels.type }}</dt>
+    <dd>{{ typeLabel() }}</dd>
+  </div>
+  <div>
+    <dt>{{ copy.labels.created }}</dt>
+    <dd>
+      <bdi dir="ltr">{{ created() }}</bdi>
+    </dd>
+  </div>
+  <div>
+    <dt>{{ copy.labels.employee }}</dt>
+    <dd>
+      <bdi dir="auto">{{ question().employee.display_name }}</bdi>
+      @if (group(); as letter) {
+        <span>, {{ copy.labels.group }} {{ letter }}</span>
+      }
+    </dd>
+  </div>
+  @if (question().car; as car) {
+    <div>
+      <dt>{{ copy.labels.car }}</dt>
+      <dd>
+        @if (car.display_name; as name) {
+          <bdi dir="auto">{{ name }}</bdi>
+          <span>, </span>
+        }
+        <span>{{ copy.labels.officialKey }} </span><bdi dir="ltr">{{ car.car_key }}</bdi>
+      </dd>
+    </div>
+  }
+  <div>
+    <dt>{{ copy.labels.status }}</dt>
+    <dd>{{ statusLabel() }}</dd>
+  </div>
+</dl>
+
+@if (question().status === 'open') {
+  @if (formState(); as state) {
+    <app-answer-form
+      [question]="question()"
+      [state]="state"
+      (answered)="answered.emit($event)"
+      (alreadyAnswered)="alreadyAnswered.emit()"
+    />
+  }
+} @else if (stored(); as answer) {
+  <section class="stored-answer" [attr.aria-label]="storedCopy.heading">
+    <h3>{{ storedCopy.heading }}</h3>
+    <dl class="facts">
+      @if (answer.amount; as amount) {
+        <div>
+          <dt>{{ storedCopy.amount }}</dt>
+          <dd>
+            <bdi dir="ltr">{{ amount }}</bdi>
+          </dd>
+        </div>
+      }
+      @if (answer.effectiveDate; as date) {
+        <div>
+          <dt>{{ storedCopy.effectiveDate }}</dt>
+          <dd>
+            <bdi dir="ltr">{{ date }}</bdi>
+          </dd>
+        </div>
+      }
+      @if (answer.note; as note) {
+        <div>
+          <dt>{{ storedCopy.note }}</dt>
+          <dd><app-bidi-text [text]="note" /></dd>
+        </div>
+      }
+      @if (answer.text; as text) {
+        <div>
+          <dt>{{ storedCopy.text }}</dt>
+          <dd class="answer-text"><app-bidi-text [text]="text" /></dd>
+        </div>
+      }
+    </dl>
+  </section>
+}

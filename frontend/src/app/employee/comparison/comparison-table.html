@@ -1,0 +1,224 @@
+@if (columns().length > 0) {
+  <!-- Focusable, so that the keyboard can scroll the table when it is wider than the area. -->
+  <div class="scroll" role="region" tabindex="0" [attr.aria-label]="copy.scrollLabel">
+    <table>
+      <caption [textContent]="copy.caption"></caption>
+      <thead>
+        <tr>
+          <th scope="col">
+            <span class="visually-hidden">{{ copy.itemColumn }}</span>
+          </th>
+          @for (column of columns(); track column.id) {
+            <th scope="col" class="column">
+              <app-bidi-text [text]="column.title" />
+              @if (column.alternative; as alternative) {
+                @if (alternative.car; as car) {
+                  <app-car-picker
+                    [position]="alternative.position"
+                    [title]="column.title"
+                    [car]="car"
+                    [catalog]="catalogView()"
+                  />
+                }
+              }
+            </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">{{ copy.rows.car }}</th>
+          @for (column of columns(); track column.id) {
+            <td>
+              @if (column.view.car; as car) {
+                <!-- The whole name is one isolate: a number in it must stay in its place in the name. -->
+                <p>
+                  @if (car.display_name; as name) {
+                    <bdi dir="auto">{{ name }}</bdi>
+                  } @else {
+                    <bdi dir="ltr">{{ car.car_key }}</bdi>
+                  }
+                </p>
+                @if (car.group; as group) {
+                  <p class="detail">{{ copy.car.group }} {{ groupLetter(group) }}</p>
+                }
+                @if (car.display_name) {
+                  <p class="detail">
+                    {{ copy.car.officialKey }} <bdi dir="ltr" class="key">{{ car.car_key }}</bdi>
+                  </p>
+                }
+              } @else if (column.alternative) {
+                <p>{{ copy.car.waiver }}</p>
+              } @else if (column.view.status === 'calculated') {
+                <p>{{ copy.car.none }}</p>
+              }
+            </td>
+          }
+        </tr>
+
+        <tr>
+          <th scope="row">{{ copy.rows.eligibility }}</th>
+          @for (column of columns(); track column.id) {
+            <td>
+              @if (column.alternative; as alternative) {
+                <p class="status">{{ copy.status[alternative.status] }}</p>
+                <p><app-bidi-text [text]="alternative.eligibility.reason" /></p>
+              } @else if (column.view.status === 'pending') {
+                <p class="status">{{ copy.status.pending }}</p>
+              }
+              @if (column.view.missing.length > 0) {
+                <p class="detail">{{ copy.missing.heading }}</p>
+                <ul class="missing">
+                  @for (item of column.view.missing; track item.field) {
+                    <li>
+                      <app-bidi-text [text]="item.label" />:
+                      <span class="tag">
+                        {{ item.sent_to_rep ? copy.missing.sentToRep : copy.missing.notSent }}
+                      </span>
+                    </li>
+                  }
+                </ul>
+              }
+            </td>
+          }
+        </tr>
+
+        @if (!noAlternatives()) {
+          <tr>
+            <th scope="row">{{ copy.rows.car_cost }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric"><app-amount [value]="column.alternative?.car_cost" /></td>
+            }
+          </tr>
+        }
+
+        @if (!noAlternatives()) {
+          <tr>
+            <th scope="row">{{ copy.rows.car_budget }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric"><app-amount [value]="column.alternative?.car_budget" /></td>
+            }
+          </tr>
+        }
+
+        @if (hasUnusedBudget()) {
+          <tr>
+            <th scope="row">{{ copy.rows.unused_budget }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric">
+                @let unusedBudget = column.alternative?.unused_budget ?? null;
+                @if (unusedBudget !== null) {
+                  <app-amount [value]="unusedBudget" />
+                  <span class="note">{{ copy.unusedBudgetNote }}</span>
+                }
+              </td>
+            }
+          </tr>
+        }
+
+        <tr>
+          <th scope="row">{{ copy.rows.participation }}</th>
+          @for (column of columns(); track column.id) {
+            <td class="numeric">
+              <app-amount [value]="column.view.participation" />
+              @if (column.alternative?.participation_effective_date; as effectiveDate) {
+                <span class="note">
+                  <app-bidi-text [text]="effectiveFrom(effectiveDate)" />
+                </span>
+              }
+            </td>
+          }
+        </tr>
+
+        @if (hasGapShares()) {
+          <tr>
+            <th scope="row">{{ copy.rows.employee_gap_share }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric">
+                <app-amount [value]="column.alternative?.employee_gap_share" />
+              </td>
+            }
+          </tr>
+          <tr>
+            <th scope="row">{{ copy.rows.employer_gap_share }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric">
+                <app-amount [value]="column.alternative?.employer_gap_share" />
+              </td>
+            }
+          </tr>
+        }
+
+        <tr>
+          <th scope="row">{{ copy.rows.usage_value }}</th>
+          @for (column of columns(); track column.id) {
+            <td class="numeric"><app-amount [value]="column.view.usage_value" /></td>
+          }
+        </tr>
+
+        <tr>
+          <th scope="row">{{ copy.rows.ev_refund }}</th>
+          @for (column of columns(); track column.id) {
+            <td class="numeric"><app-amount [value]="column.view.ev_refund" /></td>
+          }
+        </tr>
+
+        <tr>
+          <th scope="row">{{ copy.rows.car_maintenance }}</th>
+          @for (column of columns(); track column.id) {
+            <td class="numeric"><app-amount [value]="column.view.car_maintenance" /></td>
+          }
+        </tr>
+
+        <tr class="result first-result">
+          <th scope="row">{{ copy.rows.net_pay }}</th>
+          @for (column of columns(); track column.id) {
+            <td class="numeric"><app-amount [value]="column.view.net_pay" /></td>
+          }
+        </tr>
+
+        @if (!noAlternatives()) {
+          <tr class="result">
+            <th scope="row">{{ copy.rows.difference }}</th>
+            @for (column of columns(); track column.id) {
+              <td class="numeric">
+                <app-amount [value]="column.alternative?.difference" [signed]="true" />
+              </td>
+            }
+          </tr>
+        }
+
+        @if (!noAlternatives()) {
+          @for (part of breakdownParts; track part) {
+            <tr class="breakdown">
+              <th scope="row">{{ breakdownLabel(part) }}</th>
+              @for (column of columns(); track column.id) {
+                <td class="numeric">
+                  <app-amount [value]="column.alternative?.breakdown?.[part]" [signed]="true" />
+                </td>
+              }
+            </tr>
+          }
+        }
+
+        @if (!noAlternatives()) {
+          <tr>
+            <th scope="row">{{ copy.rows.explanation }}</th>
+            @for (column of columns(); track column.id) {
+              <td>
+                @for (line of column.alternative?.explanation; track $index) {
+                  <p><app-bidi-text [text]="line" /></p>
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  @if (noAlternatives()) {
+    <p class="empty">{{ copy.noAlternatives }}</p>
+  }
+} @else {
+  <p class="empty">{{ copy.empty }}</p>
+}

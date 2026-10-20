@@ -1,0 +1,144 @@
+<fieldset>
+  <legend>{{ legend }}</legend>
+  <div class="body">
+    @let car = summary();
+    @if (!entered()) {
+      <p class="empty">{{ notEntered }}</p>
+    } @else {
+      <div class="summary">
+        @if (car.description; as description) {
+          <p class="car-name">
+            <bdi>{{ description.name }}</bdi
+            >, <app-bidi-text [text]="description.year" />
+          </p>
+        }
+        <p class="car-key">
+          <span class="key-label">{{ copy.keyLabel }}</span>
+          <span class="key-value"><app-bidi-text [text]="car.key ?? notEntered" /></span>
+        </p>
+      </div>
+    }
+    <div>
+      <button
+        type="button"
+        #opener
+        [attr.aria-label]="entered() ? copy.change + ': ' + legend : null"
+        [attr.aria-expanded]="expanded()"
+        [attr.aria-controls]="expanded() ? searchId : null"
+        (click)="toggle()"
+      >
+        {{ entered() ? copy.change : copy.choose }}
+      </button>
+    </div>
+
+    @if (expanded()) {
+      <div class="search" [id]="searchId">
+        <form class="query" novalidate (submit)="$event.preventDefault(); submit()">
+          <div class="field">
+            <label for="current-car-year">{{ copy.year }}</label>
+            <input
+              #yearInput
+              id="current-car-year"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              dir="ltr"
+              class="numeric"
+              [formField]="form.year"
+              [attr.aria-invalid]="yearProblem() === null ? null : 'true'"
+              [attr.aria-describedby]="yearProblem() === null ? null : 'current-car-year-message'"
+            />
+            @if (yearProblem(); as text) {
+              <p id="current-car-year-message" class="field-error">
+                <app-bidi-text [text]="text" />
+              </p>
+            }
+          </div>
+          <div class="field">
+            <label for="current-car-text">{{ copy.text }}</label>
+            <input
+              #textInput
+              id="current-car-text"
+              type="text"
+              autocomplete="off"
+              dir="auto"
+              [formField]="form.text"
+              [attr.aria-invalid]="textProblem() === null ? null : 'true'"
+              [attr.aria-describedby]="
+                textProblem() === null ? 'current-car-text-hint' : 'current-car-text-message'
+              "
+            />
+            @if (textProblem(); as text) {
+              <p id="current-car-text-message" class="field-error">
+                <app-bidi-text [text]="text" />
+              </p>
+            } @else {
+              <p id="current-car-text-hint" class="hint">{{ copy.textHint }}</p>
+            }
+          </div>
+          <div class="buttons">
+            <button type="submit" class="button-primary">{{ copy.search }}</button>
+            <button type="button" (click)="dismiss()">{{ copy.cancel }}</button>
+          </div>
+        </form>
+
+        <p class="status" aria-live="polite"><app-bidi-text [text]="status()" /></p>
+
+        @if (candidates().length > 0) {
+          <form class="choose" (submit)="$event.preventDefault(); choose()">
+            <fieldset class="candidates">
+              <legend>{{ copy.candidates }}</legend>
+              <ul class="candidate-list">
+                @for (item of candidates(); track $index) {
+                  <li>
+                    <input
+                      type="radio"
+                      name="current-car-candidate"
+                      [id]="'current-car-candidate-' + $index"
+                      [value]="item.candidate.car_key"
+                      [checked]="choice().key === item.candidate.car_key"
+                      (change)="select(item.candidate.car_key)"
+                    />
+                    <label class="candidate" [for]="'current-car-candidate-' + $index">
+                      <span class="candidate-name"
+                        ><bdi>{{ item.name }}</bdi></span
+                      >
+                      @for (fact of item.facts; track fact.label) {
+                        <span class="fact">
+                          <span class="fact-label">{{ fact.label }}</span
+                          >&ngsp;
+                          @if (fact.verbatim) {
+                            <bdi>{{ fact.value }}</bdi>
+                          } @else {
+                            <app-bidi-text [text]="fact.value" />
+                          }
+                        </span>
+                      }
+                    </label>
+                  </li>
+                }
+              </ul>
+            </fieldset>
+            @if (choice().problem; as text) {
+              <p id="current-car-choice-message" class="field-error">
+                <app-bidi-text [text]="text" />
+              </p>
+            }
+            <div>
+              <button
+                type="submit"
+                class="button-primary"
+                [attr.aria-describedby]="
+                  choice().problem === null ? null : 'current-car-choice-message'
+                "
+                [disabled]="choice().key === null || choosing()"
+              >
+                {{ copy.confirm }}
+              </button>
+            </div>
+          </form>
+        }
+      </div>
+    }
+  </div>
+</fieldset>

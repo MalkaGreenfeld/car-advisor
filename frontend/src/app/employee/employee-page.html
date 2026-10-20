@@ -1,0 +1,58 @@
+<main class="employee-page">
+  <header class="page-header">
+    <h1>{{ copy.page.title }}</h1>
+    <button type="button" (click)="startNew()">{{ copy.page.newConversation }}</button>
+  </header>
+
+  <div class="notice" aria-live="assertive" aria-atomic="true">
+    @if (store.notice(); as key) {
+      <p>{{ copy.notices[key] }}</p>
+    }
+  </div>
+
+  <div class="status" aria-live="polite">
+    @switch (status()) {
+      @case ('loading') {
+        <p class="status-message">{{ sharedCopy.loading }}</p>
+      }
+      @case ('not_found') {
+        <div class="status-message">
+          <p>{{ copy.page.notFound }}</p>
+          <button type="button" class="button-primary" (click)="startNew()">
+            {{ copy.page.newConversation }}
+          </button>
+        </div>
+      }
+      @case ('failed') {
+        <div class="status-message">
+          <p>{{ sharedCopy.failed }}</p>
+          <button type="button" class="button-primary" (click)="retry()">
+            {{ copy.page.retry }}
+          </button>
+        </div>
+      }
+    }
+    @if (store.updateFailed()) {
+      <p class="status-message update-failed">{{ copy.page.updateFailed }}</p>
+    }
+  </div>
+
+  @if (status() === 'ready') {
+    <div class="layout">
+      <section class="area chat" aria-labelledby="chat-heading">
+        <h2 id="chat-heading">{{ copy.chat.heading }}</h2>
+        <app-chat />
+      </section>
+
+      <section class="area details" aria-labelledby="details-heading">
+        <h2 id="details-heading">{{ copy.details.heading }}</h2>
+        <app-my-details />
+      </section>
+
+      <section class="area comparison" aria-labelledby="comparison-heading">
+        <h2 id="comparison-heading">{{ copy.comparison.heading }}</h2>
+        <app-comparison-table />
+      </section>
+    </div>
+  }
+</main>

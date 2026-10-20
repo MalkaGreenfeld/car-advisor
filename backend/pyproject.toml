@@ -1,0 +1,46 @@
+[project]
+name = "car-advisor"
+version = "0.1.0"
+description = "Strauss Car Advisor backend: API, dataset importer, payroll engine and advisor agent"
+requires-python = "==3.12.*"
+dependencies = [
+    "alembic==1.20.0",
+    "fastapi==0.143.0",
+    "mssql-python==1.16.0",
+    "pydantic==2.14.1",
+    "pydantic-ai-slim[openai]==2.55.0",
+    "pydantic-settings==2.15.0",
+    "python-multipart==0.0.32",
+    "pyyaml==6.0.3",
+    "sqlalchemy==2.1.4",
+    "uvicorn==0.54.0",
+]
+
+[project.scripts]
+car-advisor-import = "car_advisor.dataset.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "hypothesis==6.169.0",
+    "pytest==9.1.1",
+    "ruff==0.17.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+# Every signature must be annotated; Any stays allowed where a library hands over untyped values.
+ignore = ["ANN401"]
+
+[tool.pytest]
+testpaths = ["tests"]
+strict = true
+markers = ["mssql: needs a live SQL Server at TEST_MSSQL_URL; skipped when it is unset"]
