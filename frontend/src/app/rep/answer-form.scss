@@ -1,0 +1,38 @@
+:host {
+  display: block;
+}
+
+.answer-form {
+  display: grid;
+  gap: var(--space-3);
+  max-inline-size: 28rem;
+  margin-block-start: var(--space-3);
+}
+
+input,
+textarea {
+  inline-size: 100%;
+}
+
+// A left-to-right input: its end is the right edge, under the start of the label.
+.numeric {
+  text-align: end;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.notice {
+  margin: 0;
+  color: var(--color-error);
+}

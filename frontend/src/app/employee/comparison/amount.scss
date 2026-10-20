@@ -1,0 +1,16 @@
+bdi {
+  display: inline-block;
+  // Wide enough for a signed ₪12,345, so that the last digits of the amounts in a column line up
+  // while the cell keeps them at its left edge.
+  min-inline-size: 8ch;
+  text-align: end;
+  white-space: nowrap;
+}
+
+[data-direction='increase'] {
+  color: var(--color-increase);
+}
+
+[data-direction='decrease'] {
+  color: var(--color-decrease);
+}

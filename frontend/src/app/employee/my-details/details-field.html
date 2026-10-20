@@ -1,0 +1,37 @@
+<div class="field">
+  <label [for]="controlId()">{{ label() }}</label>
+  @if (options(); as choices) {
+    <select
+      [id]="controlId()"
+      [formField]="field()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      [attr.aria-describedby]="describedBy()"
+      (blur)="committed.emit()"
+      (keydown.enter)="enter($event)"
+    >
+      @for (choice of choices; track choice.value) {
+        <option [value]="choice.value">{{ choice.label }}</option>
+      }
+    </select>
+  } @else {
+    <input
+      type="text"
+      autocomplete="off"
+      [id]="controlId()"
+      [formField]="field()"
+      [attr.inputmode]="inputMode()"
+      [attr.dir]="numeric() ? 'ltr' : 'auto'"
+      [class.numeric]="numeric()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
+      [attr.aria-describedby]="describedBy()"
+      (blur)="committed.emit()"
+      (keydown.enter)="enter($event)"
+    />
+  }
+  @if (hint(); as text) {
+    <p [id]="hintId()" class="hint"><app-bidi-text [text]="text" /></p>
+  }
+  @if (message(); as text) {
+    <p [id]="messageId()" class="field-error"><app-bidi-text [text]="text" /></p>
+  }
+</div>

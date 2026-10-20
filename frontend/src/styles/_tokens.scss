@@ -1,0 +1,36 @@
+// Every text color keeps at least 4.5:1, and the focus ring and --color-border-strong at least
+// 3:1, against --color-bg, --color-surface and --color-surface-muted (Req 16.11, 16.13).
+:root {
+  --font-family: 'Heebo Variable', Arial, sans-serif;
+
+  --color-text: #1f2328;
+  --color-text-muted: #4d5156;
+  --color-placeholder: #5f6368;
+  --color-bg: #f5f6f7;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef0f2;
+  --color-border: #d0d4d9;
+  --color-border-strong: #7a7f86;
+
+  --color-accent: #1d4f91;
+  --color-accent-hover: #163e73;
+  --color-on-accent: #ffffff;
+
+  --color-increase: #1a6b3c;
+  --color-decrease: #b42318;
+  --color-error: #b42318;
+
+  --focus-ring: 2px solid var(--color-accent);
+  --focus-ring-offset: 2px;
+
+  --radius: 4px;
+  --border-width: 1px;
+  --border: var(--border-width) solid var(--color-border);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+}

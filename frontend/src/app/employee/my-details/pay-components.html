@@ -1,0 +1,75 @@
+<fieldset [attr.aria-describedby]="message() === null ? null : messageId">
+  <legend>{{ legend }}</legend>
+  <div class="body">
+    @if (rows().length === 0) {
+      <p class="empty">{{ stored() === null ? notEntered : copy.none }}</p>
+    } @else {
+      <ul class="rows">
+        @for (row of rows(); track row.key; let index = $index) {
+          @let fields = form[index];
+          @let kindProblem = problemOf(fields.kind);
+          @let labelProblem = problemOf(fields.label);
+          @let amountProblem = problemOf(fields.amount);
+          <li class="row">
+            <div
+              role="group"
+              class="row-fields"
+              [attr.aria-labelledby]="titleId(row.key)"
+              [attr.aria-describedby]="row.saved === null ? unsavedId(row.key) : null"
+            >
+              <p class="row-title" [id]="titleId(row.key)">
+                <app-bidi-text [text]="titleOf(index)" />
+              </p>
+              <app-details-field
+                [name]="controlName(row.key, 'kind')"
+                [label]="copy.fields.kind.label"
+                [options]="kindOptions"
+                [field]="fields.kind"
+                [message]="kindProblem"
+                [invalid]="kindProblem !== null"
+                (committed)="commit(fields.kind)"
+              />
+              <app-details-field
+                [name]="controlName(row.key, 'label')"
+                [label]="copy.fields.label.label"
+                [field]="fields.label"
+                [message]="labelProblem"
+                [invalid]="labelProblem !== null"
+                (committed)="commit(fields.label)"
+              />
+              <app-details-field
+                [name]="controlName(row.key, 'amount')"
+                [label]="copy.fields.amount.label"
+                inputMode="decimal"
+                [field]="fields.amount"
+                [message]="amountProblem"
+                [invalid]="amountProblem !== null"
+                (committed)="commit(fields.amount)"
+              />
+              @if (row.saved === null) {
+                <p class="hint" [id]="unsavedId(row.key)">{{ copy.unsaved }}</p>
+              }
+            </div>
+            <button
+              type="button"
+              class="remove"
+              [attr.aria-label]="copy.remove + ': ' + titleOf(index)"
+              (click)="remove(row.key)"
+            >
+              {{ copy.remove }}
+            </button>
+          </li>
+        }
+      </ul>
+    }
+    <div class="actions">
+      <button type="button" #addButton (click)="add()">{{ copy.add }}</button>
+      @if (stored() === null && rows().length === 0) {
+        <button type="button" (click)="saveNone()">{{ copy.none }}</button>
+      }
+    </div>
+    @if (message(); as text) {
+      <p [id]="messageId" class="field-error"><app-bidi-text [text]="text" /></p>
+    }
+  </div>
+</fieldset>

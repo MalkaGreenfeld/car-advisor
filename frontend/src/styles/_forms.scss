@@ -1,0 +1,74 @@
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+label {
+  font-weight: 500;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file']),
+select,
+textarea {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius);
+
+  &[aria-invalid='true'] {
+    border-color: var(--color-error);
+  }
+
+  &:disabled {
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+  }
+}
+
+::placeholder {
+  color: var(--color-placeholder);
+  // Firefox lowers the placeholder opacity by default, which would break the 4.5:1 contrast.
+  opacity: 1;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-error);
+}
+
+button {
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--color-surface-muted);
+  }
+
+  &:disabled {
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+    border-color: var(--color-border);
+    cursor: not-allowed;
+  }
+}
+
+.button-primary:not(:disabled) {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+
+  &:hover {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+  }
+}

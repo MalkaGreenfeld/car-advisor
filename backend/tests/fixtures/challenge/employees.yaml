@@ -1,0 +1,131 @@
+# The six sample employees of the challenge, with the reference figures of its calculation sheet
+# (sheets "עובדים לדוגמה" and "חישובים" of the workbook of 2026-10-12). The sheet rounds each figure
+# to whole shekels. "insurance" is National Insurance plus health tax.
+#
+# The new car's participation is not listed: the test answers it as the representative with the
+# default participation of the car in the catalog, which is what the sheet used.
+#
+# The sheet's tax and insurance of an electric alternative include the grossed-up refund (440 or 473).
+# The engine adds exactly 250 to net pay and does not gross it up, so the test compares those two
+# figures of the alternative only where after_taxes_include_gross_up is not set.
+employees:
+  - id: E-001
+    question: "אם אעבור מהקורולה קרוס ל-BYD Atto 3 החשמלי - כמה זה ישנה לי בנטו?"
+    profile:
+      eligibility_group: C
+      occupation: "מנהל/ת מוצר"
+      base_salary: 18500
+      pay_components: []
+      pension_rate_percent: 6
+      study_fund_rate_percent: 2.5
+      credit_points: 2.75
+      children_under_23: 2
+      has_current_car: true
+      current_car_key: "2026-2025-1-00413-00296"   # Toyota Corolla Cross
+      current_car_participation: 300
+    alternative: {kind: car, car_key: "2026-2025-1-01014-00003"}   # BYD Atto 3
+    today: {net_pay: 11032, income_tax: 3443, insurance: 2153}
+    after: {net_pay: 11693, income_tax: 3283, insurance: 2092}
+    after_taxes_include_gross_up: true
+    difference: 661
+
+  - id: E-002
+    question: "יש לי 5 ילדים. אם אקח קרניבל במסלול ברוכת ילדים - מה יקרה לנטו?"
+    profile:
+      eligibility_group: B
+      occupation: "נציג/ת מכירות שטח"
+      base_salary: 9800
+      pay_components:
+        - {kind: commission, label: Commissions, amount: 2400}
+      pension_rate_percent: 6
+      study_fund_rate_percent: 0
+      credit_points: 2.25
+      children_under_23: 5
+      has_current_car: true
+      current_car_key: "2026-2025-1-00885-00619"   # Kia Niro
+      current_car_participation: 250
+    alternative: {kind: car, car_key: "2026-2025-1-00885-00648"}   # Kia Carnival, family track
+    today: {net_pay: 8600, income_tax: 1369, insurance: 1250}
+    after: {net_pay: 5078, income_tax: 2861, insurance: 1879}
+    difference: -3522
+    employee_gap_share: 1150     # half of 6,000 - 3,700
+
+  - id: E-003
+    question: "היום אני מקבלת אחזקת רכב. אם אקח MG4 חשמלי - כמה אפסיד או ארוויח בנטו?"
+    profile:
+      eligibility_group: B
+      occupation: "מפתח/ת תוכנה"
+      base_salary: 21000
+      pay_components: []
+      pension_rate_percent: 6.5
+      study_fund_rate_percent: 2.5
+      credit_points: 2.75
+      children_under_23: 0
+      has_current_car: false     # the maintenance of 1,500 comes from the occupation
+    alternative: {kind: car, car_key: "2026-2025-1-00443-00032"}   # MG4
+    today: {net_pay: 15047, income_tax: 3419, insurance: 2144}
+    after: {net_pay: 13109, income_tax: 3910, insurance: 2315}
+    after_taxes_include_gross_up: true
+    difference: -1938
+    today_car_maintenance: 1500
+
+  - id: E-004
+    question: "אם אחליף את הטוסון ב-EV3 - מה ההפרש בנטו?"
+    profile:
+      eligibility_group: C
+      occupation: "מנהל/ת אזור מכירות"
+      base_salary: 16000
+      pay_components:
+        - {kind: commission, label: Commissions, amount: 3000}
+      pension_rate_percent: 6
+      study_fund_rate_percent: 2.5
+      credit_points: 2.25
+      children_under_23: 3
+      has_current_car: true
+      current_car_key: "2026-2025-1-00253-00133"   # Hyundai Tucson
+      current_car_participation: 400
+    alternative: {kind: car, car_key: "2026-2025-1-00885-00675"}   # Kia EV3
+    today: {net_pay: 10693, income_tax: 3991, insurance: 2301}
+    after: {net_pay: 11900, income_tax: 3497, insurance: 2128}
+    after_taxes_include_gross_up: true
+    difference: 1207
+
+  - id: E-005
+    question: "אם אוותר על הרכב ואקבל אחזקה - כמה אקבל בנטו?"
+    profile:
+      eligibility_group: C
+      occupation: "מנהל/ת פיתוח"
+      base_salary: 27000
+      pay_components: []
+      pension_rate_percent: 7
+      study_fund_rate_percent: 2.5
+      credit_points: 2.75
+      children_under_23: 1
+      has_current_car: true
+      current_car_key: "2026-2025-1-00588-00446"   # Mazda 3
+      current_car_participation: 350
+    alternative: {kind: waiver}     # the maintenance is 2,000
+    today: {net_pay: 14244, income_tax: 6593, insurance: 3248}
+    after: {net_pay: 17806, income_tax: 5694, insurance: 2935}
+    difference: 3562
+
+  - id: E-006
+    question: "אם אעבור מהאוקטביה לטסלה מודל 3 - מה יקרה לנטו?"
+    profile:
+      eligibility_group: D
+      occupation: "מנהל/ת מחלקה"
+      base_salary: 32000
+      pay_components:
+        - {kind: bonus, label: Bonus, amount: 2000}
+      pension_rate_percent: 6
+      study_fund_rate_percent: 2.5
+      credit_points: 2.25
+      children_under_23: 4
+      has_current_car: true
+      current_car_key: "2026-2025-1-00676-01455"   # Skoda Octavia
+      current_car_participation: 500
+    alternative: {kind: car, car_key: "2026-2025-1-01327-00730"}   # Tesla Model 3
+    today: {net_pay: 17073, income_tax: 9367, insurance: 4170}
+    after: {net_pay: 17794, income_tax: 9183, insurance: 4106}
+    after_taxes_include_gross_up: true
+    difference: 721

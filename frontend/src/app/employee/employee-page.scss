@@ -1,0 +1,95 @@
+$wide-layout: 1024px;
+$panel-width: 320px;
+
+.employee-page {
+  max-inline-size: 80rem;
+  margin-inline: auto;
+  padding: var(--space-4) var(--space-5) var(--space-6);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-block-end: var(--space-4);
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border);
+}
+
+.notice p {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-error);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-error);
+  border-radius: var(--radius);
+}
+
+.status-message {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+
+  p {
+    margin: 0;
+  }
+
+  button {
+    margin-block-start: var(--space-4);
+  }
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.area {
+  min-inline-size: 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+
+  h2 {
+    margin-block-end: var(--space-3);
+  }
+}
+
+@media (min-width: $wide-layout) {
+  // The panel spans both rows. Giving the spare height to the second row keeps a tall panel from
+  // pushing the comparison away from the conversation.
+  .layout {
+    grid-template-columns: $panel-width minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+
+  .chat {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .comparison {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  // Column 1 is the inline-start edge, which is the right-hand side in RTL.
+  .details {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    position: sticky;
+    inset-block-start: var(--space-4);
+    max-block-size: calc(100dvh - 2 * var(--space-4));
+    overflow-y: auto;
+  }
+}
+
+.update-failed {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}

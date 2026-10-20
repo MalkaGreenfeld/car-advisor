@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+.question-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+
+  div {
+    min-inline-size: 0;
+  }
+
+  dt {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.stored-answer {
+  margin-block-start: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border);
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+}
+
+// Line breaks that Transport_Rep typed stay in the stored text.
+.answer-text {
+  white-space: pre-line;
+}

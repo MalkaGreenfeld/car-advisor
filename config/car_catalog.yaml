@@ -1,0 +1,246 @@
+# Quote every code: YAML reads an unquoted 00001 as the number 1, and the schema rejects it.
+mock_data: "MOCK DATA - the challenge's catalog of 2026-10-12. The costs and the participations are fictitious, the codes and the usage values are real. To use Strauss's catalog, replace this file with it in the same format."
+# The sheet puts the two family-track cars in a group of their own. Here they are in group A, so that the group filter
+# shows them to every employee; the number of children decides who may take them.
+# monthly_cost is the cost to the company. For a family-track car it sets the gap above the budget.
+# default_participation is only a suggestion for the representative; the engine never uses it.
+cars:
+  - display_name: "Kia Picanto"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00885"
+      model_code: "00643"
+    monthly_cost: 2650
+    default_participation: 150
+    group: A
+    family_track: false
+
+  - display_name: "Toyota Yaris Cross HSD"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00672"
+      model_code: "00130"
+    monthly_cost: 3400
+    default_participation: 200
+    group: A
+    family_track: false
+
+  - display_name: "BYD Dolphin"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "01014"
+      model_code: "00012"
+    monthly_cost: 3300
+    default_participation: 200
+    group: A
+    family_track: false
+
+  - display_name: "SEAT Leon"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00778"
+      model_code: "00618"
+    monthly_cost: 3450
+    default_participation: 200
+    group: A
+    family_track: false
+
+  - display_name: "Kia Niro"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00885"
+      model_code: "00619"
+    monthly_cost: 3600
+    default_participation: 250
+    group: B
+    family_track: false
+
+  - display_name: "MG MG4"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00443"
+      model_code: "00032"
+    monthly_cost: 3550
+    default_participation: 250
+    group: B
+    family_track: false
+
+  - display_name: "Toyota Corolla"
+    official_key:
+      tax_year: 2026
+      registration_year: 2026
+      vehicle_type_code: "1"
+      manufacturer_code: "00839"
+      model_code: "00295"
+    monthly_cost: 3700
+    default_participation: 250
+    group: B
+    family_track: false
+
+  - display_name: "Hyundai Kona EV"
+    official_key:
+      tax_year: 2026
+      registration_year: 2026
+      vehicle_type_code: "1"
+      manufacturer_code: "00253"
+      model_code: "00138"
+    monthly_cost: 3650
+    default_participation: 250
+    group: B
+    family_track: false
+
+  - display_name: "Toyota Corolla Cross"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00413"
+      model_code: "00296"
+    monthly_cost: 4300
+    default_participation: 300
+    group: C
+    family_track: false
+
+  - display_name: "BYD Atto 3"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "01014"
+      model_code: "00003"
+    monthly_cost: 4100
+    default_participation: 300
+    group: C
+    family_track: false
+
+  - display_name: "Kia EV3"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00885"
+      model_code: "00675"
+    monthly_cost: 4350
+    default_participation: 300
+    group: C
+    family_track: false
+
+  - display_name: "Hyundai Tucson"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00253"
+      model_code: "00133"
+    monthly_cost: 4450
+    default_participation: 400
+    group: C
+    family_track: false
+
+  - display_name: "Mazda 3"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00588"
+      model_code: "00446"
+    monthly_cost: 4200
+    default_participation: 350
+    group: C
+    family_track: false
+
+  - display_name: "Tesla Model 3"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "01327"
+      model_code: "00730"
+    monthly_cost: 5100
+    default_participation: 500
+    group: D
+    family_track: false
+
+  - display_name: "Skoda Octavia"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00676"
+      model_code: "01455"
+    monthly_cost: 5000
+    default_participation: 500
+    group: D
+    family_track: false
+
+  - display_name: "Kia Sportage HEV"
+    official_key:
+      tax_year: 2026
+      registration_year: 2026
+      vehicle_type_code: "1"
+      manufacturer_code: "00416"
+      model_code: "00294"
+    monthly_cost: 5150
+    default_participation: 500
+    group: D
+    family_track: false
+
+  - display_name: "BYD Seal"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "01014"
+      model_code: "00014"
+    monthly_cost: 5200
+    default_participation: 500
+    group: D
+    family_track: false
+
+  - display_name: "Toyota RAV4"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00413"
+      model_code: "00368"
+    monthly_cost: 5200
+    default_participation: 500
+    group: D
+    family_track: false
+
+  - display_name: "Kia Carnival"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00885"
+      model_code: "00648"
+    monthly_cost: 6000
+    default_participation: 500
+    group: A
+    family_track: true
+
+  - display_name: "Hyundai Santa Fe"
+    official_key:
+      tax_year: 2026
+      registration_year: 2025
+      vehicle_type_code: "1"
+      manufacturer_code: "00481"
+      model_code: "00533"
+    monthly_cost: 5600
+    default_participation: 500
+    group: A
+    family_track: true

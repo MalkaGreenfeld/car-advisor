@@ -1,0 +1,28 @@
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface);
+}
+
+caption {
+  padding-block-end: var(--space-2);
+  font-weight: 600;
+  text-align: start;
+}
+
+th,
+td {
+  padding: var(--space-2) var(--space-3);
+  border: var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+th {
+  font-weight: 600;
+}
+
+thead th {
+  background: var(--color-surface-muted);
+}

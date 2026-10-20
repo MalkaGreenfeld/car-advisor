@@ -1,0 +1,23 @@
+<form (submit)="$event.preventDefault(); submit()">
+  <div class="field">
+    <label for="chat-message">{{ copy.messageLabel }}</label>
+    <textarea
+      #textarea
+      id="chat-message"
+      rows="3"
+      aria-describedby="chat-message-hint"
+      [maxLength]="maxLength"
+      [placeholder]="copy.placeholder"
+      [readOnly]="locked()"
+      [value]="draft()"
+      (input)="draft.set(textarea.value)"
+      (keydown.enter)="$event.preventDefault(); submit()"
+    ></textarea>
+  </div>
+  <div class="actions">
+    <p id="chat-message-hint" class="hint">{{ copy.hint }}</p>
+    <button type="submit" class="button-primary" [disabled]="sendDisabled()">
+      {{ copy.send }}
+    </button>
+  </div>
+</form>

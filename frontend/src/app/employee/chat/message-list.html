@@ -1,0 +1,15 @@
+@if (messages().length > 0) {
+  <!-- Focusable so that the keyboard can scroll it, as the list scrolls on its own. -->
+  <ol #list class="messages" tabindex="0" [attr.aria-label]="copy.listLabel">
+    @for (message of messages(); track message.id) {
+      <li class="message" [attr.data-role]="message.role">
+        @if (message.role !== 'notice') {
+          <span class="sender">{{ copy.senders[message.role] }}</span>
+        }
+        <p class="text"><app-bidi-text [text]="message.text" /></p>
+      </li>
+    }
+  </ol>
+} @else {
+  <p class="empty">{{ copy.empty }}</p>
+}

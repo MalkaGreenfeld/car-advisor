@@ -1,0 +1,74 @@
+<form class="answer-form" novalidate [attr.aria-label]="copy.formLabel" (submit)="submit($event)">
+  @if (state().kind === 'participation') {
+    <div class="field">
+      <label [for]="id('amount')">{{ copy.amount.label }}</label>
+      <input
+        type="text"
+        dir="ltr"
+        inputmode="decimal"
+        autocomplete="off"
+        class="numeric"
+        [id]="id('amount')"
+        [formField]="form().amount"
+        [attr.aria-invalid]="message('amount') !== null ? 'true' : null"
+        [attr.aria-describedby]="describedBy('amount', true)"
+      />
+      <p [id]="hintId('amount')" class="hint">{{ copy.amount.hint }}</p>
+      @if (message('amount'); as text) {
+        <p [id]="messageId('amount')" class="field-error">{{ text }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <label [for]="id('effective_date')">{{ copy.effectiveDate.label }}</label>
+      <input
+        type="date"
+        dir="ltr"
+        class="numeric"
+        [id]="id('effective_date')"
+        [formField]="form().effective_date"
+        [attr.aria-invalid]="message('effective_date') !== null ? 'true' : null"
+        [attr.aria-describedby]="describedBy('effective_date')"
+      />
+      @if (message('effective_date'); as text) {
+        <p [id]="messageId('effective_date')" class="field-error">{{ text }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <label [for]="id('note')">{{ copy.note.label }}</label>
+      <input
+        type="text"
+        autocomplete="off"
+        [id]="id('note')"
+        [formField]="form().note"
+        [attr.aria-invalid]="message('note') !== null ? 'true' : null"
+        [attr.aria-describedby]="describedBy('note')"
+      />
+      @if (message('note'); as text) {
+        <p [id]="messageId('note')" class="field-error">{{ text }}</p>
+      }
+    </div>
+  } @else {
+    <div class="field">
+      <label [for]="id('text')">{{ copy.text.label }}</label>
+      <textarea
+        rows="4"
+        [id]="id('text')"
+        [formField]="form().text"
+        [attr.aria-invalid]="message('text') !== null ? 'true' : null"
+        [attr.aria-describedby]="describedBy('text')"
+      ></textarea>
+      @if (message('text'); as text) {
+        <p [id]="messageId('text')" class="field-error">{{ text }}</p>
+      }
+    </div>
+  }
+
+  <div class="actions">
+    <button type="submit" class="button-primary" [attr.aria-busy]="submitting()">
+      {{ submitting() ? copy.sending : copy.submit }}
+    </button>
+    <p class="notice" role="status">{{ noticeText() }}</p>
+  </div>
+</form>

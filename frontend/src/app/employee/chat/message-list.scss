@@ -1,0 +1,47 @@
+:host {
+  display: block;
+}
+
+.messages {
+  display: grid;
+  gap: var(--space-3);
+  max-block-size: 24rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.message {
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  border-inline-start: 3px solid var(--color-border-strong);
+
+  &[data-role='employee'] {
+    border-inline-start-color: var(--color-accent);
+  }
+
+  &[data-role='notice'] {
+    color: var(--color-error);
+    border-inline-start-color: var(--color-error);
+  }
+}
+
+.sender {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.text {
+  margin: 0;
+  // The newlines of a message stay, and a long key breaks instead of widening the page.
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}

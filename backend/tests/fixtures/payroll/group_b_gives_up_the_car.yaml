@@ -1,0 +1,32 @@
+profile:
+  display_name: Fictitious employee, group B
+  eligibility_group: B
+  occupation: Financial analyst
+  base_salary: 15400
+  pay_components:
+    - {kind: bonus, label: Monthly bonus, amount: 1600}
+  pension_rate_percent: 7
+  study_fund_rate_percent: 2.5
+  credit_points: 2.75
+scenario:
+  usage_value: 0
+  participation: 0
+  ev_refund: 0
+  car_maintenance: 2500
+expected:
+  gross_salary: 19500                    # 15,400 + 1,600 bonus + 2,500 car maintenance
+  taxable_usage_value: 0
+  study_fund_taxable_excess: 0           # the employer deposit rate is 0, as in the challenge's method
+  taxable_income: 19500                  # the gross salary: no usage value, no excess
+  tax_before_credits: 3384.5             # 701; 427; 20% of 6,090 = 1,218; 31% of 3,350 = 1,038.5
+  credit_points_credit: 665.5            # 2.75 * 242
+  pension_credit: 232.75                 # 35% of 665; the 1,190 contribution is limited to 7% of the 9,500 ceiling
+  income_tax: 2486.25                    # 3,384.5 - 665.5 - 232.75
+  national_insurance: 916.6888           # 1.04% of 7,522 = 78.2288; 7% of 11,978 = 838.46
+  health_tax: 862.2232                   # 3.23% of 7,522 = 242.9606; 5.17% of 11,978 = 619.2626
+  pension_contribution: 1190             # 7% of 17,000; the bonus is in the base, the car maintenance is not
+  study_fund_contribution: 425           # 2.5% of 17,000
+  participation: 0
+  ev_refund: 0
+  car_maintenance: 2500
+  net_pay: 13619.838                     # 19,500 - 2,486.25 - 916.6888 - 862.2232 - 1,190 - 425

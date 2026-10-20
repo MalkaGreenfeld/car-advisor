@@ -1,0 +1,24 @@
+@for (row of rows; track $index) {
+  @switch (row.type) {
+    @case ('field') {
+      @let problem = problemOf(row.name);
+      <app-details-field
+        [name]="row.name"
+        [label]="row.label"
+        [hint]="row.hint"
+        [options]="row.options"
+        [inputMode]="row.inputMode"
+        [field]="form[row.name]"
+        [message]="problem?.message ?? null"
+        [invalid]="problem?.invalid ?? false"
+        (committed)="save(row.name)"
+      />
+    }
+    @case ('pay_components') {
+      <app-pay-components />
+    }
+    @case ('current_car') {
+      <app-current-car />
+    }
+  }
+}

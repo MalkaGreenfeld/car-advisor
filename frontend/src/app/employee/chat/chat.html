@@ -1,0 +1,19 @@
+<app-message-list [messages]="messages()" />
+<app-typing-indicator [active]="typing()" />
+<app-composer
+  [(draft)]="draft"
+  [locked]="waiting()"
+  [sendDisabled]="sendDisabled()"
+  (submitted)="send($event)"
+/>
+
+<div class="visually-hidden" aria-live="polite">
+  @for (message of announced().advisor; track message.id) {
+    <p>{{ message.text }}</p>
+  }
+</div>
+<div class="visually-hidden" aria-live="assertive">
+  @for (message of announced().notices; track message.id) {
+    <p>{{ message.text }}</p>
+  }
+</div>
