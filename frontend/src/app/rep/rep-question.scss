@@ -12,14 +12,19 @@
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: var(--space-2) var(--space-4);
   margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
 
   div {
     min-inline-size: 0;
   }
 
   dt {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
   }
 
   dd {

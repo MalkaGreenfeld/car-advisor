@@ -57,7 +57,7 @@ input.numeric {
 
 .hint {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
 
@@ -96,9 +96,14 @@ input.numeric {
     grid-template-columns: auto 1fr;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
+    transition: background var(--transition-fast);
 
     &:has(input:checked) {
       background: var(--color-surface-muted);
+    }
+
+    &:hover {
+      background: rgb(0 0 0 / 0.02);
     }
 
     & + li {

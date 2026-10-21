@@ -1,37 +1,61 @@
 :host {
   display: block;
   // The line is kept when the indicator is off, so that the composer does not jump.
-  min-block-size: 1.5rem;
+  min-block-size: 2rem;
   font-size: 0.875rem;
   color: var(--color-text-muted);
+  padding-inline-start: var(--space-2);
 }
 
-.dots span {
-  animation: blink 1.4s infinite both;
-
-  &:nth-child(2) {
-    animation-delay: 0.2s;
-  }
-
-  &:nth-child(3) {
-    animation-delay: 0.4s;
-  }
-}
-
-@keyframes blink {
+@keyframes pulse {
   0%,
-  80%,
   100% {
     opacity: 0.2;
+    transform: scale(0.75);
   }
 
-  40% {
+  50% {
     opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: var(--space-1);
+  vertical-align: middle;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bubble-bot);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+
+  span {
+    display: inline-block;
+    inline-size: 9px;
+    block-size: 9px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    font-size: 0;
+    line-height: 0;
+    color: transparent;
+    overflow: hidden;
+    animation: pulse 1.2s ease-in-out infinite both;
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dots span {
     animation: none;
+    opacity: 0.6;
   }
 }

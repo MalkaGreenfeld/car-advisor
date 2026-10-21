@@ -1,5 +1,7 @@
 :host {
   display: block;
+  flex: 1;
+  min-block-size: 0;
 }
 
 .empty {
@@ -24,6 +26,7 @@ caption {
   inset-inline-start: 0;
   inline-size: 100cqi;
   font-weight: 400;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
 
@@ -91,15 +94,21 @@ td ul {
   font-size: 0.875rem;
 }
 
+// Difference row highlight
+.result:last-of-type td {
+  background: rgb(29 79 145 / 0.06);
+}
+
 .result th,
 .result td {
   font-weight: 600;
 }
 
-// The line between the items that go into the calculation and what comes out of it.
+// Net pay row highlight
 .first-result th,
 .first-result td {
   border-block-start: 2px solid var(--color-border-strong);
+  background: rgb(29 79 145 / 0.03);
 }
 
 .breakdown th {

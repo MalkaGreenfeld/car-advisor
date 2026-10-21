@@ -4,7 +4,11 @@ $panel-width: 320px;
 .employee-page {
   max-inline-size: 80rem;
   margin-inline: auto;
-  padding: var(--space-4) var(--space-5) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .page-header {
@@ -12,14 +16,19 @@ $panel-width: 320px;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  margin-block-end: var(--space-4);
+  flex-shrink: 0;
   padding-block-end: var(--space-3);
   border-block-end: var(--border);
+
+  h1 {
+    font-size: 1.25rem;
+  }
 }
 
 .notice p {
-  margin: 0 0 var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  margin: 0;
+  margin-block-start: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   color: var(--color-error);
   background: var(--color-surface);
   border: var(--border-width) solid var(--color-error);
@@ -27,11 +36,12 @@ $panel-width: 320px;
 }
 
 .status-message {
-  margin: 0 0 var(--space-4);
-  padding: var(--space-5);
+  margin: 0;
+  margin-block-start: var(--space-3);
+  padding: var(--space-4);
   background: var(--color-surface);
-  border: var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
 
   p {
     margin: 0;
@@ -44,28 +54,44 @@ $panel-width: 320px;
 
 .layout {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
+  flex: 1;
+  min-block-size: 0;
+  margin-block-start: var(--space-3);
 }
 
 .area {
   min-inline-size: 0;
-  padding: var(--space-4) var(--space-5);
+  min-block-size: 0;
+  padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
-  border: var(--border);
-  border-radius: var(--radius);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow var(--transition-normal);
+
+  &:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
 
   h2 {
-    margin-block-end: var(--space-3);
+    flex-shrink: 0;
+    margin-block-end: var(--space-2);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
   }
 }
 
 @media (min-width: $wide-layout) {
-  // The panel spans both rows. Giving the spare height to the second row keeps a tall panel from
-  // pushing the comparison away from the conversation.
   .layout {
     grid-template-columns: $panel-width minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    align-items: start;
+    grid-template-rows: 1fr auto;
+    align-items: stretch;
   }
 
   .chat {
@@ -76,15 +102,14 @@ $panel-width: 320px;
   .comparison {
     grid-column: 2;
     grid-row: 2;
+    max-block-size: 40vh;
+    overflow-y: auto;
   }
 
   // Column 1 is the inline-start edge, which is the right-hand side in RTL.
   .details {
     grid-column: 1;
     grid-row: 1 / span 2;
-    position: sticky;
-    inset-block-start: var(--space-4);
-    max-block-size: calc(100dvh - 2 * var(--space-4));
     overflow-y: auto;
   }
 }

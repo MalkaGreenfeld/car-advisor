@@ -20,8 +20,8 @@
   margin: 0 0 var(--space-4);
   padding: var(--space-4) var(--space-5);
   background: var(--color-surface);
-  border: var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
 }
 
 .status-message {
@@ -36,20 +36,25 @@
 
 .update-failed {
   color: var(--color-error);
-  border-color: var(--color-error);
+  border-inline-start: 3px solid var(--color-error);
 }
 
 .confirmation {
   color: var(--color-increase);
-  border-color: var(--color-increase);
+  border-inline-start: 3px solid var(--color-increase);
 }
 
 .group {
   margin-block-end: var(--space-4);
   padding: var(--space-4) var(--space-5);
   background: var(--color-surface);
-  border: var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-normal);
+
+  &:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
 
   h2 {
     margin-block-end: var(--space-3);

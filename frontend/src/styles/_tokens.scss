@@ -9,7 +9,7 @@
   --color-bg: #f5f6f7;
   --color-surface: #ffffff;
   --color-surface-muted: #eef0f2;
-  --color-border: #d0d4d9;
+  --color-border: #e2e4e8;
   --color-border-strong: #7a7f86;
 
   --color-accent: #1d4f91;
@@ -23,9 +23,24 @@
   --focus-ring: 2px solid var(--color-accent);
   --focus-ring-offset: 2px;
 
-  --radius: 4px;
+  --radius: 8px;
+  --radius-sm: 4px;
+  --radius-lg: 12px;
   --border-width: 1px;
   --border: var(--border-width) solid var(--color-border);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.06), 0 0 1px rgb(0 0 0 / 0.04);
+  --shadow-lg: 0 4px 16px rgb(0 0 0 / 0.08), 0 0 1px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.03);
+  --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.07), 0 0 0 1px rgb(0 0 0 / 0.03);
+
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+
+  --color-bubble-bot: var(--color-surface-muted);
+  --color-bubble-user: var(--color-accent);
+  --color-bubble-user-text: var(--color-on-accent);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;

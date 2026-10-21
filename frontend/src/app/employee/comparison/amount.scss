@@ -9,8 +9,10 @@ bdi {
 
 [data-direction='increase'] {
   color: var(--color-increase);
+  font-weight: 600;
 }
 
 [data-direction='decrease'] {
   color: var(--color-decrease);
+  font-weight: 600;
 }

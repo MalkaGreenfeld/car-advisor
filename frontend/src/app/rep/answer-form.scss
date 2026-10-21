@@ -13,6 +13,7 @@ input,
 select,
 textarea {
   inline-size: 100%;
+  border-radius: var(--radius-sm);
 }
 
 // A left-to-right input: its end is the right edge, under the start of the label.
@@ -22,7 +23,7 @@ textarea {
 
 .hint {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
 

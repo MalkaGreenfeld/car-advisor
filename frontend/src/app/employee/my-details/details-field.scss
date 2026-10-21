@@ -5,6 +5,7 @@
 input,
 select {
   inline-size: 100%;
+  border-radius: var(--radius-sm);
 }
 
 // The input is left to right, so its end is the right edge, under the start of the label.
@@ -14,6 +15,6 @@ select {
 
 .hint {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
