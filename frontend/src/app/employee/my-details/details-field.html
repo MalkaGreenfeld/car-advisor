@@ -20,6 +20,7 @@
       [id]="controlId()"
       [formField]="field()"
       [attr.inputmode]="inputMode()"
+      [attr.list]="listId()"
       [attr.dir]="numeric() ? 'ltr' : 'auto'"
       [class.numeric]="numeric()"
       [attr.aria-invalid]="invalid() ? 'true' : null"
@@ -27,6 +28,13 @@
       (blur)="committed.emit()"
       (keydown.enter)="enter($event)"
     />
+    @if (listId(); as id) {
+      <datalist [id]="id">
+        @for (suggestion of suggestions(); track suggestion) {
+          <option [value]="suggestion"></option>
+        }
+      </datalist>
+    }
   }
   @if (hint(); as text) {
     <p [id]="hintId()" class="hint"><app-bidi-text [text]="text" /></p>

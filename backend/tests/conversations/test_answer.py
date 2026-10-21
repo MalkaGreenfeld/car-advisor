@@ -16,6 +16,7 @@ from car_advisor.conversations.rep_questions import (
     AlreadyAnswered,
     Answered,
     AnswerOutcome,
+    ChoiceAnswer,
     InvalidAnswer,
     ParticipationAnswer,
     QuestionNotFound,
@@ -44,9 +45,13 @@ from tests.conversations.test_rep_questions import (
     NIRO,
     NIRO_KEY,
     PROFILE,
+    SHIPPED,
+    UNLISTED_OCCUPATION,
+    WAIVER,
     ask,
     catalog_car,
     comparison_of,
+    set_group,
     stored_version,
 )
 
@@ -56,11 +61,20 @@ EFFECTIVE_DATE = date(2026, 1, 1)
 NOTE = "מתחיל בינואר"
 PARTICIPATION = ParticipationAnswer(amount=AMOUNT, effective_date=EFFECTIVE_DATE, note=NOTE)
 # The spaces and the line break are part of the text, which is stored as it was typed.
-TEXT = TextAnswer(text="  כן, אפשר לוותר\nעל הרכב  ")
-TEXT_FIELDS = [RepField.OCCUPATION, RepField.CURRENT_CAR, RepField.CURRENT_CAR_PARTICIPATION]
+TEXT = TextAnswer(text="  קיה פיקנטו\nשנת 2023  ")
+TEXT_FIELDS = [RepField.CURRENT_CAR, RepField.CURRENT_CAR_PARTICIPATION]
+# A product manager is group C and allows the waiver with a maintenance of 2,000.
+PRODUCT_MANAGER = "מנהל/ת מוצר"
+OCCUPATION_CHOICE = ChoiceAnswer(choice=PRODUCT_MANAGER)
+GROUP_CHOICE = ChoiceAnswer(choice="D")
+CHOICE_FIELDS = {
+    RepField.OCCUPATION: OCCUPATION_CHOICE,
+    RepField.ELIGIBILITY_GROUP: GROUP_CHOICE,
+}
 RIGHT_KIND: dict[RepField, SubmittedAnswer] = {
     RepField.NEW_CAR_PARTICIPATION: PARTICIPATION,
     **{field: TEXT for field in TEXT_FIELDS},
+    **CHOICE_FIELDS,
 }
 
 NOTE_WIDTH = RepQuestionRow.__table__.c.answer_note.type.length
@@ -72,6 +86,7 @@ RACERS = 8
 def conversation_id(dataset_service: ConversationService) -> UUID:
     conversation_id = dataset_service.create()
     dataset_service.update_profile(conversation_id, PROFILE)
+    set_group(dataset_service, conversation_id, "C")
     return conversation_id
 
 
@@ -121,7 +136,7 @@ def test_a_valid_participation_answer_is_stored_exactly_and_reaches_the_comparis
     answered_at = stored["answered_at"]
     assert isinstance(answered_at, datetime)
     assert before <= answered_at <= after
-    [listed] = list_for_rep(sessions)
+    [listed] = list_for_rep(sessions, SHIPPED)
     assert listed.answer == StoredAnswer(
         amount=AMOUNT, effective_date=EFFECTIVE_DATE, note=NOTE, text=None
     )
@@ -159,10 +174,14 @@ def test_the_participation_applies_only_to_the_car_the_question_is_about(
 
     answered, waiting = comparison_of(dataset_service, conversation_id).alternatives
     assert (answered.status, answered.participation) == ("calculated", 351)
-    assert (waiting.status, waiting.participation) == ("pending", None)
-    assert [(item.field, item.sent_to_rep) for item in waiting.missing] == [
-        (MissingField.NEW_CAR_PARTICIPATION, True)
-    ]
+    assert (answered.participation_source, answered.participation_awaiting_rep) == (
+        "representative",
+        False,
+    )
+    # The Niro keeps the catalog's amount, marked as awaiting its own answer.
+    assert (waiting.status, waiting.participation) == ("calculated", niro.default_participation)
+    assert (waiting.participation_source, waiting.participation_awaiting_rep) == ("catalog", True)
+    assert waiting.missing == ()
 
 
 def test_the_effective_date_is_shown_and_never_changes_the_amount(
@@ -230,6 +249,28 @@ def test_a_text_answer_is_stored_exactly_and_applies_no_participation(
             pytest.param(field, PARTICIPATION, ("text",), id=f"participation-to-{field.value}")
             for field in TEXT_FIELDS
         ),
+        *(
+            pytest.param(field, wrong, ("choice",), id=f"{name}-to-{field.value}")
+            for field in CHOICE_FIELDS
+            for name, wrong in (("text", TEXT), ("participation", PARTICIPATION))
+        ),
+        pytest.param(
+            RepField.NEW_CAR_PARTICIPATION,
+            GROUP_CHOICE,
+            ("amount", "effective_date"),
+            id="choice-to-participation",
+        ),
+        pytest.param(RepField.CURRENT_CAR, GROUP_CHOICE, ("text",), id="choice-to-text"),
+        pytest.param(
+            RepField.OCCUPATION, ChoiceAnswer(choice="רופא"), ("choice",), id="unlisted-name"
+        ),
+        pytest.param(RepField.OCCUPATION, GROUP_CHOICE, ("choice",), id="group-to-occupation"),
+        pytest.param(
+            RepField.ELIGIBILITY_GROUP, ChoiceAnswer(choice="E"), ("choice",), id="group-e"
+        ),
+        pytest.param(
+            RepField.ELIGIBILITY_GROUP, OCCUPATION_CHOICE, ("choice",), id="name-to-group"
+        ),
     ],
 )
 def test_an_answer_of_the_wrong_kind_is_invalid_and_the_question_stays_open(
@@ -283,7 +324,7 @@ def test_a_second_answer_gets_already_answered_and_changes_nothing(
     assert snapshot(sessions, question_id) == stored
     assert stored_version(sessions, conversation_id) == version
     assert comparison_of(dataset_service, conversation_id) == comparison
-    assert list_for_rep(sessions) == [first.question]
+    assert list_for_rep(sessions, SHIPPED) == [first.question]
 
 
 def test_an_unknown_question_is_not_found_and_nothing_is_stored(
@@ -428,6 +469,7 @@ def test_answers_that_race_for_one_question_store_exactly_one(
     service = ConversationService(file_sessions, CarLookup(real_sessions, 2026), app_config)
     conversation_id = service.create()
     service.update_profile(conversation_id, PROFILE)
+    set_group(service, conversation_id, "C")
     service.set_alternatives(conversation_id, [ATTO_3])
     question_id, _ = ask(
         service, file_sessions, conversation_id, RepField.NEW_CAR_PARTICIPATION, atto_3
@@ -532,6 +574,73 @@ def test_a_participation_answer_takes_a_leap_day_and_any_note_that_fits(
     data: dict[str, object],
 ) -> None:
     assert ParticipationAnswer.model_validate(data).note == data.get("note")
+
+
+def test_an_occupation_answer_writes_the_occupation_and_the_comparison_follows_it(
+    dataset_service: ConversationService,
+    sessions: sessionmaker[Session],
+    engine_view: EngineView,
+) -> None:
+    # No group yet: the occupation is unlisted and the representative set none.
+    conversation_id = dataset_service.create()
+    dataset_service.update_profile(conversation_id, PROFILE)
+    dataset_service.set_alternatives(conversation_id, [ATTO_3, WAIVER])
+    before = comparison_of(dataset_service, conversation_id)
+    assert [column.status for column in before.alternatives] == ["pending", "pending"]
+    question_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
+
+    outcome = answer(dataset_service, question_id, OCCUPATION_CHOICE)
+
+    assert isinstance(outcome, Answered)
+    assert outcome.question.answer == StoredAnswer(
+        amount=None, effective_date=None, note=None, text=None, choice=PRODUCT_MANAGER
+    )
+    assert snapshot(sessions, question_id)["answer_choice"] == PRODUCT_MANAGER
+    state = dataset_service.state(conversation_id)
+    assert state.profile.occupation == PRODUCT_MANAGER
+    assert (state.employee_group.group, state.employee_group.source) == ("C", "occupation")
+    atto, waiver = comparison_of(dataset_service, conversation_id).alternatives
+    assert (atto.status, waiver.status, waiver.car_maintenance) == (
+        "calculated",
+        "calculated",
+        2000,
+    )
+    sent = frozenset({(MissingField.OCCUPATION, None)})
+    assert state.comparison == engine_view(state, sent=sent)
+
+
+def test_a_group_answer_sets_the_override_and_keeps_the_occupation(
+    conversation_id: UUID, dataset_service: ConversationService, sessions: sessionmaker[Session]
+) -> None:
+    question_id, _ = ask(dataset_service, sessions, conversation_id, RepField.ELIGIBILITY_GROUP)
+
+    outcome = answer(dataset_service, question_id, GROUP_CHOICE)
+
+    assert isinstance(outcome, Answered)
+    state = dataset_service.state(conversation_id)
+    assert state.profile.occupation == UNLISTED_OCCUPATION
+    assert (state.employee_group.group, state.employee_group.source) == ("D", "representative")
+
+
+def test_an_invalid_choice_writes_nothing_to_the_profile(
+    conversation_id: UUID, dataset_service: ConversationService, sessions: sessionmaker[Session]
+) -> None:
+    question_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
+    profile = dataset_service.state(conversation_id).profile
+
+    outcome = answer(dataset_service, question_id, ChoiceAnswer(choice="רופא"))
+
+    assert outcome == InvalidAnswer(fields=("choice",))
+    assert dataset_service.state(conversation_id).profile == profile
+    assert snapshot(sessions, question_id)["status"] == RepQuestionStatus.OPEN
+
+
+@pytest.mark.parametrize("choice", ["", "x" * 201])
+def test_a_choice_answer_refuses_an_empty_or_too_long_value(choice: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        ChoiceAnswer(choice=choice)
+
+    assert [error["loc"] for error in caught.value.errors(include_input=False)] == [("choice",)]
 
 
 @pytest.mark.parametrize("text", ["כן", "  x  ", TEXT.text, "a" * TEXT_WIDTH])

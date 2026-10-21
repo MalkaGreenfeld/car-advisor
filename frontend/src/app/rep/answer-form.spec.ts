@@ -5,7 +5,13 @@ import { deferred } from '../employee/testing/deferred';
 import { ApiClient, ApiError } from '../shared/api';
 import { RepQuestionView } from '../shared/api-models';
 import { AnswerForm } from './answer-form';
-import { AnswerFieldName, AnswerFormState, AnswerKind, createAnswerForm } from './answer-values';
+import {
+  AnswerFieldName,
+  AnswerFormState,
+  AnswerKind,
+  createAnswerForm,
+  initialValuesOf,
+} from './answer-values';
 import { repCopy } from './rep.copy';
 
 const copy = repCopy.answer;
@@ -20,6 +26,8 @@ function question(overrides: Partial<RepQuestionView> = {}): RepQuestionView {
     employee: { display_name: 'דנה לוי', number: 4821 },
     eligibility_group: 'B',
     car: { display_name: 'Kia EV6', car_key: '2026-2026-1-01229-00004' },
+    suggested_amount: null,
+    choices: null,
     status: 'open',
     answer: null,
     ...overrides,
@@ -29,10 +37,17 @@ function question(overrides: Partial<RepQuestionView> = {}): RepQuestionView {
 function answeredView(overrides: Partial<RepQuestionView> = {}): RepQuestionView {
   return question({
     status: 'answered',
-    answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null },
+    answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null, choice: null },
     ...overrides,
   });
 }
+
+const GROUP_CHOICES = [
+  { value: 'A', label: 'א' },
+  { value: 'B', label: 'ב' },
+  { value: 'C', label: 'ג' },
+  { value: 'D', label: 'ד' },
+];
 
 function createFakeApi() {
   return { answerRepQuestion: vi.fn<ApiClient['answerRepQuestion']>() };
@@ -50,13 +65,19 @@ describe('AnswerForm', () => {
     TestBed.configureTestingModule({ providers: [{ provide: ApiClient, useValue: api }] });
   });
 
-  async function open(kind: AnswerKind = 'participation'): Promise<void> {
-    state = createAnswerForm(kind, TestBed.inject(Injector));
+  async function open(
+    kind: AnswerKind = 'participation',
+    overrides: Partial<RepQuestionView> = {},
+  ): Promise<void> {
+    const types = { participation: 'participation', choice: 'eligibility_group', text: 'other' };
+    const shown = question({
+      question_type: types[kind] as RepQuestionView['question_type'],
+      ...(kind === 'choice' ? { car: null, choices: GROUP_CHOICES } : {}),
+      ...overrides,
+    });
+    state = createAnswerForm(kind, TestBed.inject(Injector), initialValuesOf(shown));
     fixture = TestBed.createComponent(AnswerForm);
-    fixture.componentRef.setInput(
-      'question',
-      question({ question_type: kind === 'participation' ? 'participation' : 'other' }),
-    );
+    fixture.componentRef.setInput('question', shown);
     fixture.componentRef.setInput('state', state);
     answered = vi.fn();
     alreadyAnswered = vi.fn();
@@ -232,8 +253,78 @@ describe('AnswerForm', () => {
         amount: '350',
         effective_date: '2026-01-01',
         note: 'Note',
+        choice: '',
         text: '',
       });
+    });
+
+    it('starts with the catalog amount, shown next to the field, and an empty date', async () => {
+      await open('participation', { suggested_amount: '300' });
+
+      expect(control('amount').value).toBe('300');
+      expect(control('effective_date').value).toBe('');
+      const hint = host().querySelector(`#answer-${ID}-amount-hint`)?.textContent ?? '';
+      expect(hint).toContain(copy.suggested.replace('{amount}', '₪300'));
+    });
+
+    it('still needs the effective date when it starts with the catalog amount', async () => {
+      await open('participation', { suggested_amount: '300' });
+
+      await submit();
+
+      expect(api.answerRepQuestion).not.toHaveBeenCalled();
+      expect(messageOf('effective_date')).toBe(copy.errors.effective_date);
+      expect(messageOf('amount')).toBeNull();
+    });
+
+    it('has no catalog line for a car without a catalog amount', async () => {
+      await open();
+
+      expect(control('amount').value).toBe('');
+      expect(host().querySelector('.suggested')).toBeNull();
+    });
+  });
+
+  describe('a choice question', () => {
+    it('offers the choices of the question in a required select', async () => {
+      await open('choice');
+
+      const select = control('choice') as unknown as HTMLSelectElement;
+      expect(select.tagName).toBe('SELECT');
+      expect(Array.from(select.options, (option) => option.textContent?.trim())).toEqual([
+        copy.choice.none,
+        'א',
+        'ב',
+        'ג',
+        'ד',
+      ]);
+      expect(host().querySelector('label')?.textContent?.trim()).toBe(
+        copy.choice.eligibility_group,
+      );
+    });
+
+    it('rejects no choice and sends nothing', async () => {
+      await open('choice');
+
+      await submit();
+
+      expect(api.answerRepQuestion).not.toHaveBeenCalled();
+      expect(messageOf('choice')).toBe(copy.errors.choice);
+    });
+
+    it('sends the chosen value', async () => {
+      api.answerRepQuestion.mockResolvedValue(answeredView({ question_type: 'eligibility_group' }));
+      await open('choice');
+      const select = control('choice') as unknown as HTMLSelectElement;
+      // A browser fires both when the choice changes, and [formField] reads the input event.
+      select.value = 'D';
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await settle();
+
+      await submit();
+
+      expect(api.answerRepQuestion).toHaveBeenCalledExactlyOnceWith(ID, { choice: 'D' });
     });
   });
 

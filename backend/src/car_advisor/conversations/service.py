@@ -27,6 +27,8 @@ from car_advisor.engine.comparison import (
     TodayResult,
     compare,
 )
+from car_advisor.engine.config import OccupationsTable
+from car_advisor.engine.eligibility import employee_group
 from car_advisor.engine.money import Amount
 from car_advisor.engine.types import (
     Alternative,
@@ -47,6 +49,8 @@ _ATTEMPTS: Final = 2
 # Longer than the 60 s timeout of an agent run, so a run that is working keeps its guard to the
 # end, while one that crashed frees it by itself.
 RUN_GUARD_TTL: Final = timedelta(seconds=90)
+# The profile field that holds the Group_Override, which only Transport_Rep sets.
+_GROUP_OVERRIDE: Final = "eligibility_group"
 
 
 class ConversationNotFound(Exception):
@@ -174,6 +178,10 @@ class AlternativeView(_View):
     employer_gap_share: int | None
     # After the employer's share, so that a comparison stored before this field still loads.
     employee_gap_share: int | None = None
+    # Who gave the participation, and whether a confirmation of the catalog amount is awaited
+    # (Req 6.25-6.26). Defaults, so that a comparison stored before these fields still loads.
+    participation_source: Literal["employee", "catalog", "representative"] | None = None
+    participation_awaiting_rep: bool = False
     usage_value: int | None
     ev_refund: int | None
     car_maintenance: int | None
@@ -219,10 +227,30 @@ class AgentStatus:
 
 
 @dataclass(frozen=True)
+class EmployeeGroup:
+    """The employee's Eligibility_Group and where it comes from (Req 5.23, 11.2).
+
+    Both are None while the group is unknown: the occupation is missing or matches no entry, and
+    Transport_Rep set no group.
+    """
+
+    group: Group | None
+    source: Literal["occupation", "representative"] | None
+
+    @classmethod
+    def of(cls, profile: EmployeeProfile, occupations: OccupationsTable) -> Self:
+        if profile.eligibility_group is not None:
+            return cls(profile.eligibility_group, "representative")
+        group = employee_group(profile, occupations)
+        return cls(group, None if group is None else "occupation")
+
+
+@dataclass(frozen=True)
 class ConversationState:
     id: UUID
     messages: tuple[StoredMessage, ...]
     profile: EmployeeProfile
+    employee_group: EmployeeGroup
     alternatives: tuple[Alternative, ...]
     comparison: ComparisonView | None
     open_questions: tuple[OpenQuestion, ...]
@@ -261,6 +289,10 @@ class ConversationService:
         self._lookup = lookup
         self._config = config
 
+    @property
+    def config(self) -> AppConfig:
+        return self._config
+
     def create(self) -> UUID:
         with self._sessions.begin() as session:
             row = ConversationRow(
@@ -298,10 +330,12 @@ class ConversationService:
                 )
                 .order_by(RepQuestionRow.created_at)
             ).all()
+            profile = _stored_profile(row)
             return ConversationState(
                 id=row.id,
                 messages=tuple(_stored_message(message) for message in messages),
-                profile=_stored_profile(row),
+                profile=profile,
+                employee_group=EmployeeGroup.of(profile, self._config.occupations),
                 alternatives=_stored_alternatives(row),
                 comparison=None
                 if row.comparison is None
@@ -380,6 +414,21 @@ class ConversationService:
         For the callers of recalculate, which store a change of their own in that transaction.
         """
         return self._sessions.begin()
+
+    def apply_rep_answer(
+        self, session: Session, conversation_id: UUID, changes: Mapping[str, object]
+    ) -> EmployeeProfile:
+        """Write the profile change of a choice answer inside the caller's transaction.
+
+        The only writer of the Group_Override, and of the occupation that Transport_Rep chose
+        (Req 10.17). The caller recalculates in the same transaction, and commits. The changes come
+        from a validated answer, so an invalid one is a ProfileValidationError, as a bug.
+        """
+        row = _load_row(session, conversation_id)
+        stored = _stored_profile(row).model_dump(exclude_none=True)
+        profile = validate_profile({**stored, **changes})
+        row.profile = profile.model_dump_json(exclude_none=True)
+        return profile
 
     def recalculate(self, session: Session, conversation_id: UUID) -> ComparisonView:
         """Recalculate and store the comparison inside the caller's transaction.
@@ -594,7 +643,13 @@ def _apply_valid_changes(stored: EmployeeProfile, changes: Mapping[str, object])
     rejected = [
         FieldError(name, copy_he.UNKNOWN_PROFILE_FIELD) for name in changes if name not in fields
     ]
-    accepted = {name: value for name, value in changes.items() if name in fields}
+    # The group follows from the occupation. Only an answer of Transport_Rep sets another one,
+    # through apply_rep_answer, so no change of the employee may write it (Req 9.20, 10.17).
+    if _GROUP_OVERRIDE in changes:
+        rejected.append(FieldError(_GROUP_OVERRIDE, copy_he.GROUP_FROM_OCCUPATION))
+    accepted = {
+        name: value for name, value in changes.items() if name in fields and name != _GROUP_OVERRIDE
+    }
     stored_values = stored.model_dump(exclude_none=True)
     try:
         profile = validate_profile({**stored_values, **accepted})
@@ -603,10 +658,17 @@ def _apply_valid_changes(stored: EmployeeProfile, changes: Mapping[str, object])
         invalid_names = {error.field for error in invalid.errors}
         accepted = {name: value for name, value in accepted.items() if name not in invalid_names}
         profile = validate_profile({**stored_values, **accepted})
+    order = list(fields)
     return ProfileUpdate(
         profile=profile,
         saved=tuple(name for name in fields if name in accepted),
-        rejected=tuple(rejected),
+        # In profile order, and a name that is not a profile field last.
+        rejected=tuple(
+            sorted(
+                rejected,
+                key=lambda error: order.index(error.field) if error.field in fields else len(order),
+            )
+        ),
     )
 
 
@@ -693,6 +755,8 @@ def _alternative_view(
         car_budget=_shown(result.car_budget),
         participation=_shown(result.participation),
         participation_effective_date=result.participation_effective_date,
+        participation_source=result.participation_source,
+        participation_awaiting_rep=result.participation_awaiting_rep,
         employer_gap_share=_shown(result.employer_gap_share),
         employee_gap_share=_shown(result.employee_gap_share),
         usage_value=_shown(result.usage_value),

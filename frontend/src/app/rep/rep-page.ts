@@ -4,7 +4,7 @@ import { ApiClient, ApiError } from '../shared/api';
 import { RepQuestionStatus, RepQuestionView } from '../shared/api-models';
 import { POLL_INTERVAL_MS, pollWhile } from '../shared/poller';
 import { sharedCopy } from '../shared/shared.copy';
-import { AnswerFormState, answerKindOf, createAnswerForm } from './answer-values';
+import { AnswerFormState, answerKindOf, createAnswerForm, initialValuesOf } from './answer-values';
 import { RepQuestion } from './rep-question';
 import { repCopy } from './rep.copy';
 
@@ -119,7 +119,10 @@ export class RepPage {
   private ensureForms(questions: readonly RepQuestionView[]): void {
     for (const question of questions) {
       if (question.status === 'open' && !this.forms.has(question.id)) {
-        this.forms.set(question.id, createAnswerForm(answerKindOf(question), this.injector));
+        this.forms.set(
+          question.id,
+          createAnswerForm(answerKindOf(question), this.injector, initialValuesOf(question)),
+        );
       }
     }
   }

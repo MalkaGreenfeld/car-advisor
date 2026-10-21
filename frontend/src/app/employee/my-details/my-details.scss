@@ -2,3 +2,14 @@
   display: grid;
   gap: var(--space-4);
 }
+
+.group-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}

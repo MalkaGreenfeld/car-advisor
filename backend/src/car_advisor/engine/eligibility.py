@@ -8,6 +8,7 @@ from car_advisor.engine.types import (
     CarKey,
     CarRecord,
     EmployeeProfile,
+    Group,
     MissingField,
     Powertrain,
     WaiverAlternative,
@@ -33,7 +34,19 @@ def check_eligibility(
 ) -> EligibilityResult:
     if isinstance(alternative, WaiverAlternative):
         return _check_waiver(profile, occupations)
-    return _check_car(profile, alternative.car_key, rules, catalog, record)
+    return _check_car(profile, alternative.car_key, rules, catalog, occupations, record)
+
+
+def employee_group(profile: EmployeeProfile, occupations: OccupationsTable) -> Group | None:
+    """The Group_Override when the representative set one, else the group of the occupation.
+
+    None while the occupation is missing or matches no entry; the missing field is then the
+    occupation. A group that the employee states never counts (Req 5.23).
+    """
+    if profile.eligibility_group is not None:
+        return profile.eligibility_group
+    entry = None if profile.occupation is None else occupations.find(profile.occupation)
+    return None if entry is None else entry.group
 
 
 def _check_car(
@@ -41,6 +54,7 @@ def _check_car(
     car_key: CarKey,
     rules: RulesConfig,
     catalog: CarCatalog,
+    occupations: OccupationsTable,
     record: CarRecord | None,
 ) -> EligibilityResult:
     car = catalog.find(car_key)
@@ -56,7 +70,7 @@ def _check_car(
     # The catalog entry says which track a car is on, so for a car outside the catalog the
     # profile field its decision would need is unknown and is not reported.
     if car is not None:
-        outcome = _track_verdict(profile, car, rules)
+        outcome = _track_verdict(profile, car, rules, occupations)
         if isinstance(outcome, MissingField):
             missing.append(outcome)
         elif not missing:
@@ -66,7 +80,7 @@ def _check_car(
 
 
 def _track_verdict(
-    profile: EmployeeProfile, car: CatalogCar, rules: RulesConfig
+    profile: EmployeeProfile, car: CatalogCar, rules: RulesConfig, occupations: OccupationsTable
 ) -> tuple[bool, str] | MissingField:
     if car.family_track:
         children = profile.children_under_23
@@ -76,12 +90,12 @@ def _track_verdict(
         allowed = children >= threshold
         return allowed, copy_he.family_track_reason(children, threshold, allowed=allowed)
 
-    employee_group = profile.eligibility_group
-    if employee_group is None:
-        return MissingField.ELIGIBILITY_GROUP
+    group = employee_group(profile, occupations)
+    if group is None:
+        return MissingField.OCCUPATION
     order = rules.groups.order
-    allowed = order.index(car.group) <= order.index(employee_group)
-    return allowed, copy_he.car_group_reason(car.group, employee_group, allowed=allowed)
+    allowed = order.index(car.group) <= order.index(group)
+    return allowed, copy_he.car_group_reason(car.group, group, allowed=allowed)
 
 
 def _check_waiver(profile: EmployeeProfile, occupations: OccupationsTable) -> EligibilityResult:

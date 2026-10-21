@@ -13,7 +13,13 @@
         [attr.aria-invalid]="message('amount') !== null ? 'true' : null"
         [attr.aria-describedby]="describedBy('amount', true)"
       />
-      <p [id]="hintId('amount')" class="hint">{{ copy.amount.hint }}</p>
+      <p [id]="hintId('amount')" class="hint">
+        @if (suggested(); as text) {
+          <bdi class="suggested">{{ text }}</bdi
+          >.
+        }
+        {{ copy.amount.hint }}
+      </p>
       @if (message('amount'); as text) {
         <p [id]="messageId('amount')" class="field-error">{{ text }}</p>
       }
@@ -47,6 +53,24 @@
       />
       @if (message('note'); as text) {
         <p [id]="messageId('note')" class="field-error">{{ text }}</p>
+      }
+    </div>
+  } @else if (state().kind === 'choice') {
+    <div class="field">
+      <label [for]="id('choice')">{{ choiceLabel() }}</label>
+      <select
+        [id]="id('choice')"
+        [formField]="form().choice"
+        [attr.aria-invalid]="message('choice') !== null ? 'true' : null"
+        [attr.aria-describedby]="describedBy('choice')"
+      >
+        <option value="">{{ copy.choice.none }}</option>
+        @for (choice of choices(); track choice.value) {
+          <option [value]="choice.value">{{ choice.label }}</option>
+        }
+      </select>
+      @if (message('choice'); as text) {
+        <p [id]="messageId('choice')" class="field-error">{{ text }}</p>
       }
     </div>
   } @else {

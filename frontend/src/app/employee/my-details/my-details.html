@@ -8,11 +8,19 @@
         [hint]="row.hint"
         [options]="row.options"
         [inputMode]="row.inputMode"
+        [suggestions]="row.name === 'occupation' ? occupationNames() : undefined"
         [field]="form[row.name]"
         [message]="problem?.message ?? null"
         [invalid]="problem?.invalid ?? false"
         (committed)="save(row.name)"
       />
+    }
+    @case ('group') {
+      <div class="group-field">
+        <label for="details-group">{{ groupCopy.label }}</label>
+        <output id="details-group" aria-describedby="details-group-hint">{{ groupText() }}</output>
+        <p id="details-group-hint" class="hint">{{ groupCopy.hint }}</p>
+      </div>
     }
     @case ('pay_components') {
       <app-pay-components />

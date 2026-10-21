@@ -67,7 +67,8 @@ export class ComparisonTable {
   // The cars that the pickers offer depend on the stored group, so a new group loads them again.
   // The values below are primitives, so a reload of the state does not load the list again.
   private readonly conversationId = computed(() => this.store.state()?.id);
-  private readonly group = computed(() => this.store.state()?.profile.eligibility_group ?? null);
+  // The group in use, from the occupation or the representative (Req 5.23).
+  private readonly group = computed(() => this.store.state()?.employee_group.group ?? null);
   private readonly hasCar = computed(() =>
     (this.store.state()?.comparison?.alternatives ?? []).some((alternative) => alternative.car),
   );
@@ -118,6 +119,11 @@ export class ComparisonTable {
       ? copy.breakdownParticipationAndShare
       : copy.breakdown[part];
   }
+
+  // The line under the table, while a column shows the catalog's participation (Req 6.26).
+  protected readonly hasCatalogParticipation = computed(() =>
+    this.columns().some((column) => column.alternative?.participation_source === 'catalog'),
+  );
 
   protected effectiveFrom(date: IsoDate): string {
     return `${copy.effectiveFrom} ${formatDate(date)}`;

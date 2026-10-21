@@ -600,6 +600,8 @@ class CurrentCarDescription(BaseModel):               # as typed or read, before
 
 class EmployeeProfile(BaseModel):                     # every field optional: None means "not provided"
     display_name: str | None = None
+    # The Group_Override. Only an answer of Transport_Rep writes it; the employee's changes cannot
+    # (Req 9.20, 10.17). Without it, the group is the occupation's (Req 5.23).
     eligibility_group: Group | None = None
     base_salary: Money | None = None
     pay_components: list[PayComponent] | None = None  # [] means "none", which counts as provided
@@ -637,7 +639,9 @@ class RepParticipation(BaseModel, frozen=True):
 
 `EmployeeProfile` is reused by the API and stored as JSON. Its constraints are the "allowed values" of Req 11.3, so the panel, the agent tool and the document confirm form share one rule set.
 
-**`config.py`** holds `RulesConfig`, `CarCatalog` (`find(key) -> CatalogCar | None`, `cars_for(group, order) -> list[CatalogCar]`) and `OccupationsTable` (`find(name) -> Occupation | None`, which compares names after `strip()`). The schemas are described under Data Models.
+**`config.py`** holds `RulesConfig`, `CarCatalog` (`find(key) -> CatalogCar | None`, `cars_for(group, order) -> list[CatalogCar]`) and `OccupationsTable` (`find(name) -> Occupation | None`, which compares names after `strip()` and matches both forms of a slash name). The schemas are described under Data Models.
+
+**The employee's group.** `eligibility.employee_group(profile, occupations) -> Group | None` returns `profile.eligibility_group` (the Group_Override) when set, and otherwise the group of the occupation's table entry, or `None` while the occupation is missing or unknown. Every reader of the group calls it: the eligibility check, the comparison (the budget), the catalog list of the API and of the agent tool, and the rep question's subject (Req 4.8, 5.23). When it is `None`, the missing field is `occupation`, never `eligibility_group` (Req 5.7, 6.10, 4.17).
 
 **`money.py`**
 
@@ -674,10 +678,10 @@ def check_eligibility(
 1. Collect every missing input first (Req 5.20-5.21):
    - `car_group`, if the key is not in the catalog;
    - `powertrain`, if `record` is `None`;
-   - `eligibility_group`, for a regular-track car;
+   - `occupation`, for a regular-track car while `employee_group` is `None`;
    - `children_under_23`, for a Family_Track car.
 2. Decide only when nothing is missing:
-   - regular track: `order.index(car.group) <= order.index(profile.group)`;
+   - regular track: `order.index(car.group) <= order.index(employee_group(...))`;
    - Family_Track: `children >= threshold`.
 3. Set `is_electric = record.powertrain is Powertrain.ELECTRIC`, regardless of the car's name or any agent claim (Req 5.17-5.18).
 
@@ -747,7 +751,7 @@ def compare(profile: EmployeeProfile, alternatives: Sequence[Alternative], input
   1. `alternative` and `car_display_name`;
   2. `eligibility`;
   3. `car_cost` and `car_budget`;
-  4. `participation`, `participation_effective_date` and `employer_gap_share`;
+  4. `participation`, `participation_source` (`employee` | `catalog` | `representative`), `participation_awaiting_rep` (a catalog amount whose confirmation question is open), `participation_effective_date`, `employee_gap_share` and `employer_gap_share`;
   5. `usage_value`;
   6. `ev_refund` and `car_maintenance`;
   7. `unused_budget`;
@@ -801,26 +805,32 @@ class ConversationService:
 
 **Concurrency.** `conversations.version` is SQLAlchemy's `version_id_col`. A concurrent edit, such as a panel save during an agent tool call, raises `StaleDataError`, and the service re-reads and re-applies the change once.
 
-**Script steps (Req 9.1).** `conversations/profile.py` returns `script_step(profile, open_fields) -> ScriptStep(number, missing_fields)`. The four steps follow the challenge script. A step is skipped when its only missing fields have an open Rep_Question.
+**Who writes the group.** The employee's changes (the panel, the agent tool, the document form) reject `eligibility_group` with a Hebrew message that the group follows from the occupation. Only `ConversationService.apply_rep_answer(session, conversation_id, changes)`, which the answer of a rep question calls in its transaction, writes it, and the same method writes the occupation that the representative chose (Req 10.17).
+
+**Script steps (Req 9.1).** `conversations/profile.py` returns `script_step(profile, open_fields, occupations) -> ScriptStep(number, missing_fields)`. The four steps follow the challenge script, with the occupation in step 1 next to the base salary, because the group follows from it. Step 3 asks for the current car also when the employee said there is none but the occupation's car is mandatory (Req 8.17). A step is skipped when its only missing fields have an open Rep_Question.
 
 **`rep_questions.py`**
 
 ```python
 class RepQuestionType(StrEnum):
-    PARTICIPATION = "participation"      # structured answer: amount, effective date, note
-    OCCUPATION_WAIVER = "occupation_waiver"
-    OTHER = "other"                      # free text
+    PARTICIPATION = "participation"          # structured answer: amount, effective date, note
+    OCCUPATION = "occupation"                # choice: the name of an Occupations_Table entry
+    ELIGIBILITY_GROUP = "eligibility_group"  # choice: A, B, C or D
+    OTHER = "other"                          # free text
 
 def open_or_get(session: Session, conversation_id: UUID, field: RepField, car: CatalogCar | None) -> tuple[RepQuestionRow, bool]: ...
-def answer(sessions: sessionmaker[Session], question_id: UUID, answer: ParticipationAnswer | TextAnswer) -> AnswerOutcome: ...
-def list_for_rep(sessions: sessionmaker[Session]) -> list[RepQuestionView]: ...
+def answer(conversations: ConversationService, question_id: UUID, answer: ParticipationAnswer | ChoiceAnswer | TextAnswer) -> AnswerOutcome: ...
+def list_for_rep(sessions: sessionmaker[Session], config: AppConfig) -> list[RepQuestionView]: ...
 ```
 
-**`RepField`** is the closed set of fields that only the representative can resolve:
-- `new_car_participation` (participation type, car required);
-- `occupation` (whether an unlisted occupation may give up the car);
+**`RepField`** is the closed set of fields that the representative resolves:
+- `new_car_participation` (participation type, car required): for a car without a Default_Participation, or when the employee asks for the representative's confirmation (Req 6.23-6.24);
+- `occupation` (occupation type): which table entry an unlisted occupation is;
+- `eligibility_group` (eligibility group type): the employee says the group differs from the occupation's (Req 9.20);
 - `current_car` (identification help);
 - `current_car_participation` (free text that the agent relays to the employee, see Open Questions).
+
+**Choice answers.** A `ChoiceAnswer` holds one value. `answer` reads the question's type first and checks the value: a table name for `occupation`, a group for `eligibility_group`. The conditional UPDATE stores it in `answer_choice` (migration `0002`, which also renames the type `occupation_waiver` to `occupation`), and `apply_rep_answer` writes it to the profile before the recalculation. `RepQuestionView` carries `choices` (value and Hebrew label) for these two types, and `suggested_amount`, the car's `default_participation`, for a participation question about a catalog car (Req 12.5-12.6).
 
 **Question text.** It is built in code from a Hebrew template per field: the employee label, Eligibility_Group, car display name with Official_Key, and the occupation as recorded. The agent never writes it, so salary data cannot leak into Rep_Screen (Req 12.4).
 
@@ -1136,7 +1146,7 @@ The quick-start URLs are `http://127.0.0.1:8080/employee` and `http://127.0.0.1:
 |---|---|---|
 | `id` | `UNIQUEIDENTIFIER` PK | the only ID the rep API exposes |
 | `conversation_id` | `UNIQUEIDENTIFIER` FK | never returned by rep routes (Req 12.5) |
-| `question_type` | `VARCHAR(20)` | `participation`, `occupation_waiver` or `other` |
+| `question_type` | `VARCHAR(20)` | `participation`, `occupation`, `eligibility_group` or `other` (migration `0002` renamed `occupation_waiver`) |
 | `missing_field` | `VARCHAR(30)` | a `RepField` value |
 | `car_key` | `VARCHAR(40) NULL` | canonical `CarKey` string |
 | `car_display_name` | `NVARCHAR(200) NULL` | |
@@ -1149,6 +1159,7 @@ The quick-start URLs are `http://127.0.0.1:8080/employee` and `http://127.0.0.1:
 | `participation_amount` | `DECIMAL(12,2) NULL` | at least 0 |
 | `participation_effective_date` | `DATE NULL` | required with an amount |
 | `answer_note`, `answer_text` | `NVARCHAR(500) NULL`, `NVARCHAR(2000) NULL` | |
+| `answer_choice` | `NVARCHAR(200) NULL` | migration `0002`: the table name or the group of a choice answer |
 
 Indexes on `rep_questions`:
 - `ux_rep_questions_open`: `UNIQUE (conversation_id, missing_field, car_key) WHERE status = 'open'`, declared with both `mssql_where` and `sqlite_where` so the SQLite test database enforces it too (Req 10.4);
@@ -1156,76 +1167,59 @@ Indexes on `rep_questions`:
 
 ### `rules.yaml` (schema in `engine/config.py`)
 
-The YAML below is the tracked file. Each value is a monthly amount in ₪ unless the key says `_percent`.
+The tracked file is `config/rules.yaml`. Each value is a monthly amount in ₪ unless the key says `_percent`. Its payroll values are those of the challenge's rules file `mock-2026-10-12`, whose tables are the 2025 ones, given for illustration (Req 3.13). The years are mixed on purpose: the usage values are those of the tax year 2026 dataset.
 
 ```yaml
 groups:
   order: [A, B, C, D]                        # lowest to highest (Req 3.2)
   budgets: {A: 3500, B: 3700, C: 4500, D: 5200}
 
-family_track:
-  children_threshold: 4                      # eligible when children up to age 23 >= threshold
-  car_cost: 6000                             # 4500 is the accepted alternative value
+family_track:                                # no car_cost: a Family_Track car costs its catalog monthly_cost (Req 3.4)
+  children_threshold: 4
   employer_share_percent: 50
   employee_share_percent: 50
 
 ev_refund:
   amount: 250
-  mode: net                                  # net | taxable_gross
+  mode: net                                  # net: exactly +250 in net pay, the challenge's grossed-up result
 
-unused_budget: not_paid                      # the only value the schema accepts (Req 3.8)
+unused_budget: not_paid
 
 flags:
-  participation_reduces_usage_value: false
-  commissions_in_contribution_base: false
+  participation_reduces_usage_value: false   # the challenge's tax figures match only with false
+  variable_pay_in_contribution_base: true    # commissions and bonuses count for pension and study fund
   car_maintenance_outside_benefits_base: true
 
 payroll:
-  net_pay_method: monthly                    # the only value the schema accepts (Req 3.12)
+  net_pay_method: monthly
   income_tax:
-    source: https://taxsummaries.pwc.com/israel/individual/taxes-on-personal-income
-    brackets:                                # 2026 after Amendment 288
+    source: Challenge rules file strauss-rules.json, version mock-2026-10-12 (2025 tables)
+    brackets:
       - {above: 0,     up_to: 7010,  rate_percent: 10}
       - {above: 7010,  up_to: 10060, rate_percent: 14}
-      - {above: 10060, up_to: 19000, rate_percent: 20}
-      - {above: 19000, up_to: 25100, rate_percent: 31}
-      - {above: 25100, up_to: 46690, rate_percent: 35}
+      - {above: 10060, up_to: 16150, rate_percent: 20}
+      - {above: 16150, up_to: 22440, rate_percent: 31}
+      - {above: 22440, up_to: 46690, rate_percent: 35}
       - {above: 46690, up_to: 60130, rate_percent: 47}
-      - {above: 60130, up_to: null,  rate_percent: 50}   # 47% + 3% surtax
-  credit_point:
-    value: 242
-    source: https://taxsummaries.pwc.com/israel/individual/other-tax-credits-and-incentives
+      - {above: 60130, up_to: null,  rate_percent: 50}
+  credit_point: {value: 242, source: "..."}
   social_insurance:
-    source: https://www.btl.gov.il/English%20Homepage/Insurance/Ratesandamount/Pages/forSalaried.aspx
-    reduced_rate_threshold: 7703
-    max_insurable_income: 51910
+    reduced_rate_threshold: 7522
+    max_insurable_income: 50695
     national_insurance: {reduced_rate_percent: 1.04, full_rate_percent: 7}
     health_tax: {reduced_rate_percent: 3.23, full_rate_percent: 5.17}
-  pension_credit:
-    source: https://www.kolzchut.org.il/ar/%D8%A7%D8%B3%D8%AA%D8%AD%D9%82%D8%A7%D9%82_%D9%81%D9%8A_%D8%B6%D8%B1%D9%8A%D8%A8%D8%A9_%D8%A7%D9%84%D8%AF%D8%AE%D9%84_%D8%AC%D8%B1%D8%A7%D8%A1_%D8%A7%D9%84%D9%85%D9%82%D8%AA%D8%B7%D8%B9%D8%A7%D8%AA_%D9%84%D9%84%D8%AA%D8%A3%D9%85%D9%8A%D9%86_%D8%A7%D9%84%D8%AA%D9%82%D8%A7%D8%B9%D8%AF%D9%8A
-    rate_percent: 35
-    qualifying_share_percent: 7
-    income_ceiling: 9700                     # 7% of 9,700 = 679 per month
-  study_fund:
-    source: https://www.kolzchut.org.il/he/%D7%A7%D7%A8%D7%9F_%D7%94%D7%A9%D7%AA%D7%9C%D7%9E%D7%95%D7%AA
+  pension_credit: {rate_percent: 35, qualifying_share_percent: 7, income_ceiling: 9500, source: "..."}
+  study_fund:                                # public source; no effect while employer_rate_percent is 0
     salary_ceiling: 15712
     exempt_employer_rate_percent: 7.5
-    employer_rate_percent: 7.5               # used for the taxable excess above the ceiling
+    employer_rate_percent: 0
 
-pending:
-  - field: family_track.car_cost
-    default: 6000
-    question: Strauss to confirm the family-track car price, 6,000 or 4,500 per month.
-  - field: ev_refund.mode
-    default: net
-    question: Is the EV refund paid as net, or grossed up as taxable pay (the gross-up question)?
-  - field: payroll.net_pay_method
-    default: monthly
-    question: Strauss to confirm the monthly method; the cumulative method is not implemented.
-  - field: flags.participation_reduces_usage_value
-    default: false
-    question: Does the employee's participation reduce the taxable usage value? Not verified.
+pending:                                     # any list, also empty; each default must equal its field
+  - {field: payroll.credit_point.value, default: 242, question: "The tables of the pilot year"}
+  - {field: payroll.study_fund.employer_rate_percent, default: 0, question: "..."}
 ```
+
+The EV refund is not pending: the challenge answered it (exactly ₪250 net), and `net` gives that result (Req 17.13).
 
 Every model uses `extra="forbid"`, so a misspelled key fails validation instead of being ignored.
 
@@ -1242,75 +1236,75 @@ Every model uses `extra="forbid"`, so a misspelled key fails validation instead 
 | Income tax brackets are ascending, with no gap or overlap | `brackets[0].above == 0`; every next `above` equals the previous `up_to`; every `up_to > above`; only the last bracket has `up_to: null` |
 | Rules that allow only one value | `Literal`: `mode` in {`net`, `taxable_gross`}, `unused_budget` = `not_paid`, `net_pay_method` = `monthly` |
 | Every parameter group cites a source (Req 3.14) | `source` is a non-empty string in every group |
-| `pending` is complete and in sync (Req 3.15) | it must name at least the four fields above; each `field` must resolve to a value, and `default` must equal that value |
+| `pending` is in sync (Req 3.15) | each `field` must resolve to a single value, and `default` must equal that value |
 
 ### `car_catalog.yaml` and `occupations.yaml`
 
+Both files hold the challenge's data of 2026-10-12, with a `mock_data` marker that says so (Req 4.13).
+
 ```yaml
-# config/car_catalog.yaml
-mock_data: "MOCK DATA - replace this file with Strauss's car catalog in the same format."
+# config/car_catalog.yaml: the 20 cars of the sheet "קטלוג רכבים", in its order
 cars:
-  - display_name: "Tesla Model 3"
-    official_key:                       # quote every code: YAML reads 00001 as the octal number 1
+  - display_name: "Toyota Corolla Cross"
+    official_key:                       # quote every code: YAML reads 00001 as the number 1
       tax_year: 2026
-      registration_year: 2020
+      registration_year: 2025
       vehicle_type_code: "1"
-      manufacturer_code: "01229"
-      model_code: "00001"
-    monthly_cost: 4300
+      manufacturer_code: "00413"
+      model_code: "00296"
+    monthly_cost: 4300                  # the cost to the company; for Family_Track it sets the gap
+    default_participation: 300          # the Participation of a new car until the rep answers (Req 6.3)
+    usage_value: 4070                   # the sheet's value, a check only (Req 4.18-4.19)
     group: C
     family_track: false
 ```
 
 ```python
 class CatalogCar(BaseModel, extra="forbid"):
-    display_name: Annotated[str, Field(min_length=1)]
-    official_key: CarKey                         # codes are strict strings, so an unquoted 00001 is rejected
+    display_name: NonBlankText
+    official_key: CarKey                 # codes are strict strings, so an unquoted 00001 is rejected
     monthly_cost: Annotated[Decimal, Field(gt=0)]
+    default_participation: Money | None = None
+    usage_value: Annotated[int, Field(ge=0)] | None = None
     group: Group
     family_track: bool = False
-
-class CarCatalog(BaseModel, extra="forbid"):
-    mock_data: str | None = None                 # optional, so Strauss's real file validates without it
-    cars: Annotated[list[CatalogCar], Field(min_length=1)]   # keys must be unique
 ```
 
-The Tesla row above is the verified sample row of the dataset, shown to illustrate the format. The mock file contains 15 cars, chosen with a SQL query against the loaded dataset during implementation (tasks), so every key is a real record (Req 4.1). The selection covers:
-- every group A-D;
-- at least 3 electric cars;
-- exactly one `family_track: true` car;
-- registration year 2026, so the cars are current models.
-
-`tests/rules/test_mock_files.py` asserts Req 4.1 and 4.3-4.5 against the loaded dataset.
-
-Two catalog rules worth knowing:
-- **The Family_Track car's group.** It is set to A in the mock file, so the group-and-below filter shows it to every employee. See Open Questions.
-- **The Family_Track car's cost.** Its catalog `monthly_cost` is ignored by the engine, because Car_Cost for Family_Track comes from `rules.yaml` (Glossary).
+- **Family_Track cars are in group A.** The sheet puts them in a group of their own ("משפחתי"). Group A makes the group filter show them to everyone, and the children threshold decides eligibility.
+- **The usage value is a check value.** At startup `check_catalog` compares it with the dataset record. A mismatch is a warning: one `catalog_usage_value_mismatch` log line per car and an entry in `/api/health` under `catalog_warnings`. The app starts, the health status does not change, and every calculation uses the dataset's value (Req 4.18-4.19). A car missing from the dataset still stops the startup (Req 4.7).
 
 ```yaml
-# config/occupations.yaml
-mock_data: "MOCK DATA - replace this file with Strauss's occupations table in the same format."
+# config/occupations.yaml: the 14 occupations of the sheet "עיסוקים"
 occupations:
-  - name: "Office administration"        # the real file holds Hebrew names; matching trims whitespace only
+  - name: "מפתח/ת תוכנה"                 # a slash name matches both genders
+    group: B                             # the employee's Eligibility_Group (Req 5.23)
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1500
-  - name: "Field sales"
+  - name: "נציג/ת מכירות שטח"
+    group: B
+    car_mandatory: true                  # field roles: no waiver, no Today without a car (Req 8.17)
     car_waiver_allowed: false
     car_maintenance: 0
 ```
 
 ```python
 class Occupation(BaseModel, extra="forbid"):
-    name: Annotated[str, Field(min_length=1)]
-    car_waiver_allowed: bool
-    car_maintenance: Annotated[Decimal, Field(ge=0)]
+    name: NonBlankText
+    group: Group
+    car_mandatory: bool
+    car_waiver_allowed: bool             # a mandatory car with an allowed waiver is rejected (Req 4.16)
+    car_maintenance: Money
 
 class OccupationsTable(BaseModel, extra="forbid"):
     mock_data: str | None = None
     occupations: Annotated[list[Occupation], Field(min_length=1)]   # names unique after strip()
+    def find(self, name: str) -> Occupation | None: ...             # strip(), and both forms of a slash name
 ```
 
-Loader errors name each entry by its position plus its name, for example `cars[3] (Kia Niro EV).monthly_cost: must be greater than 0`. Every invalid car or occupation is listed (Req 4.15-4.16).
+"Car mandatory" mirrors the sheet's own column, so Strauss's table maps one to one, although in the challenge's 14 rows it is the inverse of `car_waiver_allowed`.
+
+Loader errors name each entry by its position plus its name, for example `cars[3] (Kia Niro).monthly_cost: must be greater than 0`. Every invalid car or occupation is listed (Req 4.15-4.16).
 
 ### API endpoints
 
@@ -1324,12 +1318,13 @@ All routes are under `/api`.
 | `POST /conversations/{id}/messages` | `{ "text": str }`, 1-2,000 chars, not blank | 200 `ConversationState`; the last message is the reply or a notice | 404; 409 `agent_busy`; 422 |
 | `PATCH /conversations/{id}/profile` | `{ "changes": { field: value } }` | 200 `ConversationState` | 404; 422 `invalid_fields`, nothing saved |
 | `PUT /conversations/{id}/alternatives/{position}` | `{ "kind": "car", "car_key": str }` | 200 `ConversationState` | 404; 422 |
-| `GET /conversations/{id}/catalog` | - | 200 `{ cars: CatalogCarView[], missing_field: "eligibility_group" \| null }` | 404 |
+| `GET /conversations/{id}/catalog` | - | 200 `{ cars: CatalogCarView[], missing_field: "occupation" \| null }` | 404 |
+| `GET /occupations` | - | 200 `{ names: str[] }`, the table's names, for the panel's suggestions (Req 11.19) | - |
 | `GET /cars/search?registration_year=&text=` | query | 200 `{ candidates: CarCandidateView[], selection_required, none_found }` | 422 `missing_inputs`; 503 `lookup_failed` |
 | `POST /conversations/{id}/documents` | multipart `file` | 200 `DocumentCandidates` | 404; 422 `invalid_file` or `nothing_detected`; 502 `reader_failed`; 504 `reader_timeout` |
 | `POST /conversations/{id}/documents/confirm` | `{ "changes": { field: value } }` | 200 `ConversationState` | 404; 422 `invalid_fields`, nothing saved |
 | `GET /rep/questions` | - | 200 `{ questions: RepQuestionView[] }` | - |
-| `POST /rep/questions/{question_id}/answer` | `{ "participation": { amount, effective_date, note? } }` or `{ "text": str }` | 200 `RepQuestionView` | 404; 409 `already_answered`; 422 `invalid_answer` with per-field errors |
+| `POST /rep/questions/{question_id}/answer` | `{ "participation": { amount, effective_date, note? } }`, `{ "choice": str }` or `{ "text": str }` | 200 `RepQuestionView` | 404; 409 `already_answered`; 422 `invalid_answer` with per-field errors |
 
 Notes on some routes:
 - **The document confirm route** saves through `update_profile` (all-or-nothing). It then schedules `run_with_note` so the agent identifies the confirmed car (Req 13.7).
@@ -1342,7 +1337,8 @@ Notes on some routes:
 {
   "id": "6f0c1c2e-...",
   "messages": [{ "id": 12, "role": "advisor", "text": "...", "notice": null, "created_at": "2026-10-13T09:12:03Z" }],
-  "profile": { "eligibility_group": "B", "base_salary": "16000", "pay_components": [], "...": "..." },
+  "profile": { "occupation": "מפתח/ת תוכנה", "base_salary": "16000", "pay_components": [], "...": "..." },
+  "employee_group": { "group": "B", "source": "occupation" },
   "alternatives": [{ "kind": "car", "car_key": "2026-2026-1-01229-00004" }, { "kind": "waiver" }],
   "comparison": { "today": { "...": "..." }, "alternatives": [ { "...": "..." } ] },
   "open_questions": [{ "field": "new_car_participation", "car_display_name": "...", "car_key": "..." }],
@@ -1359,7 +1355,8 @@ Notes on some routes:
   "car": { "car_key": "2026-2026-1-01229-00004", "display_name": "...", "group": "C" },
   "eligibility": { "status": "eligible", "reason": "...", "is_electric": true },
   "car_cost": 4300, "car_budget": 4500,
-  "participation": 350, "participation_effective_date": "2026-01-01", "employer_gap_share": null,
+  "participation": 350, "participation_source": "representative", "participation_awaiting_rep": false,
+  "participation_effective_date": "2026-01-01", "employee_gap_share": null, "employer_gap_share": null,
   "usage_value": 2310, "ev_refund": 250, "car_maintenance": 0, "unused_budget": 200,
   "net_pay": 14445, "difference": 210,
   "breakdown": { "usage_value": 310, "ev_refund": 250, "participation": -350, "car_maintenance": 0 },
@@ -1376,12 +1373,13 @@ How the other column states look:
 **`RepQuestionView`**:
 - `id`, `question_type`, `question_text`, `created_at`;
 - `employee` (`{ display_name, number }`), `eligibility_group`;
-- `car` (`{ display_name, car_key }` or `null`);
-- `status`, and `answer` (the structured or free-text answer, or `null`).
+- `car` (`{ display_name, car_key }` or `null`), and `suggested_amount`, the car's `default_participation` for a participation question, else `null`;
+- `choices` (`[{ value, label }]` for the occupation and eligibility group types, else `null`);
+- `status`, and `answer` (the structured, choice or free-text answer, or `null`).
 
 It has no conversation ID and no salary field (Req 12.3-12.5).
 
-**`Health`**: `{ "database_reachable": bool, "dataset_loaded": bool, "tax_year": 2026, "record_count": 77988 }`. The DB check runs in a thread under a 3 s `wait_for`, so the route answers within 5 s even when SQL Server is down (Req 14.9).
+**`Health`**: `{ "database_reachable": bool, "dataset_loaded": bool, "tax_year": 2026, "record_count": 77988, "catalog_warnings": [{ "display_name", "car_key", "catalog_usage_value", "dataset_usage_value" }] }`. The warnings come from the startup check and never change the status (Req 4.19). The DB check runs in a thread under a 3 s `wait_for`, so the route answers within 5 s even when SQL Server is down (Req 14.9).
 
 **`DocumentCandidates`**: `{ "fields": { name: value | null }, "detected": [name] }`, where `null` means not detected. Nothing is stored.
 
@@ -1558,7 +1556,7 @@ def calculate_net_pay(i: PayrollInput, R: RulesConfig) -> PayrollOk | PayrollMis
 
     # 2. contribution base and employee contributions (Req 7.10)
     base = i.base_salary
-    if R.flags.commissions_in_contribution_base: base += commissions
+    if R.flags.variable_pay_in_contribution_base: base += commissions + bonuses
     if not R.flags.car_maintenance_outside_benefits_base: base += i.car_maintenance
     pension = pct(base, i.pension_rate_percent)
     study_fund = pct(base, i.study_fund_rate_percent)
@@ -1609,13 +1607,15 @@ Every scenario uses the same profile fields: base salary, commissions, bonuses, 
 | Scenario | Usage_Value | Participation | EV_Refund | Car_Maintenance |
 |---|---|---|---|---|
 | Today, current car | record's `usage_value` | `current_car_participation`, required (Req 6.2, 6.5) | `ev_refund.amount` if the record's Powertrain is electric, else 0 | 0 |
-| Today, no car | 0 | 0 | 0 | the occupation's `car_maintenance`; missing `occupation` while it is unknown (Req 18.12) |
-| Regular-track car | record's `usage_value` | the rep answer for the same `car_key`, or the current participation if the car is the current car; otherwise missing `new_car_participation` (Req 6.3-6.5, 6.21) | as for Today | 0 |
-| Family_Track car | record's `usage_value` | as a regular-track car, plus the employee's share of the gap (Req 18.8) | as for Today | 0 |
+| Today, no car | 0 | 0 | 0 | the occupation's `car_maintenance`; missing `occupation` while it is unknown (Req 8.16), and missing `current_car` with nothing calculated when the occupation's car is mandatory (Req 8.17) |
+| Regular-track car | record's `usage_value` | the current participation if the car is the current car; else the rep answer for the same `car_key`; else the catalog's `default_participation`; otherwise missing `new_car_participation` (Req 6.3-6.5, 6.21) | as for Today | 0 |
+| Family_Track car | record's `usage_value` | as a regular-track car, plus the employee's share of the gap (Req 6.8) | as for Today | 0 |
 | Giving up the car | 0 | 0 | 0 | the occupation's `car_maintenance` |
 
+The participation's source goes with the column: `employee`, `representative` or `catalog`. A `catalog` participation whose `(new_car_participation, car_key)` question is open is `participation_awaiting_rep`; the column stays calculated (Req 6.23, 6.25).
+
 **The Family_Track split** (Req 6.6-6.7, 6.9):
-- `gap = max(0, car.monthly_cost - budget[group])` (Req 18.7);
+- `gap = max(0, car.monthly_cost - budget[employee_group])` (Req 3.4);
 - `employee_share = pct(gap, employee_share_percent)`;
 - `employer_share = gap - employee_share`.
 
@@ -1839,7 +1839,7 @@ The reason contains the values the decision used: both group letters, or the chi
 
 ### Property 21: Contributions ignore items outside the base
 
-*For any* payroll input, changing bonuses, Usage_Value, Participation or EV_Refund leaves the pension and study-fund contributions unchanged. Commissions change them only when `commissions_in_contribution_base` is true. Car_Maintenance changes them only when `car_maintenance_outside_benefits_base` is false.
+*For any* payroll input, changing Usage_Value, Participation or EV_Refund leaves the pension and study-fund contributions unchanged. Commissions and bonuses change them only when `variable_pay_in_contribution_base` is true. Car_Maintenance changes them only when `car_maintenance_outside_benefits_base` is false.
 
 **Validates: Requirements 7.10**
 
@@ -2164,75 +2164,55 @@ The suite has two parts:
 - **Live latency:** the challenge script with a real key, timing each turn from the `duration_ms` log lines against the 8 s / 90% and 60 s totals (Req 9.11-9.12).
 - **Accessibility review:** keyboard-only passes, NVDA/Orca reading of the live regions, and contrast checks (Req 16.10-16.13). Full WCAG validation needs manual testing with assistive technologies and an expert review; automated tests do not prove compliance.
 
-## Update: October 2026 Challenge Data
+## Challenge Data and Review
 
-The organizers published the missing data on 2026-10-12: an updated PDF, an Excel workbook with six sheets (rules and data, car catalog, occupations, six sample employees, calculations) and a rules JSON. Requirement 18 holds the acceptance criteria. Where this section differs from an earlier section, this section wins.
+The organizers published the missing data on 2026-10-12: an updated PDF, an Excel workbook with six sheets (rules and data, car catalog, occupations, six sample employees, calculations) and a rules JSON. The review of 2026-10-20 then compared the requirements with the challenge text. Both are written into the sections above and into the requirements, so each rule appears once; this section records what was checked and why.
 
 ### What was checked
 
 - All 20 catalog cars exist in the dataset with vehicle type code 1. The model code 00003 also has a type 2 row ("TANG"), so the type code stays part of the Official_Key.
-- The challenge's net method has the structure of `payroll.py`. With the changes below, the engine reproduces the 12 net figures of the calculation sheet (Today and the Alternative of six employees) to the shekel, and the income tax and the National Insurance plus health tax of Today for all six.
+- The usage values of the catalog sheet equal the dataset's for all 20 cars (checked on 2026-10-20). They are kept as check values (Req 4.18-4.19).
+- The challenge's net method has the structure of `payroll.py`. The engine reproduces the 12 net figures of the calculation sheet (Today and the Alternative of six employees) to the shekel, with the Default_Participation of the new car, and the income tax and the National Insurance plus health tax of Today for all six.
 - The sheet's tax and National Insurance of an electric Alternative include the grossed-up refund (₪440 or ₪473). The `net` mode adds exactly ₪250 to Net_Pay and does not calculate the gross amount, so those two columns are not compared for electric Alternatives. The net figures agree.
-
-### Changes
-
-| Part | Before | After |
-|---|---|---|
-| Payroll values in `rules.yaml` | 2026 tables from PwC, BTL and Kol Zchut | the tables of the challenge's rules file: brackets at 7,010, 10,060, 16,150, 22,440, 46,690 and 60,130; National Insurance and health tax threshold 7,522 and ceiling 50,695; pension credit ceiling 9,500. `source` names the file |
-| `family_track.car_cost` | one value, 6,000 | removed. A Family_Track car costs its catalog `monthly_cost` (6,000 or 5,600) |
-| `flags.commissions_in_contribution_base` | commissions, default `false` | `flags.variable_pay_in_contribution_base`: commissions and bonuses, default `true` |
-| `payroll.study_fund.employer_rate_percent` | 7.5 | 0, because the challenge's method adds no employer deposit to the taxable income |
-| `pending` | the four required items | any list. It holds `ev_refund.mode`, `payroll.credit_point.value` and `payroll.study_fund.employer_rate_percent` |
-| `CatalogCar` | name, key, `monthly_cost`, group, `family_track` | adds the optional `default_participation` |
-| `OccupationsTable.find` | the name after `strip()` | also matches the two forms of a slash name ("מפתח/ת" is "מפתח" and "מפתחת") |
-| Scenario, Family_Track car | Participation is the employee's share of the gap | the Participation of a regular car (rep answer), plus the employee's share, both deducted from net |
-| Scenario, Today with no car | Car_Maintenance 0 | the occupation's `car_maintenance`; Today is `pending` for the occupation while it is unknown |
-| `RepQuestionView` | question text and car | adds `suggested_amount`, the car's `default_participation` |
-| `AlternativeView` | `employer_gap_share` | adds `employee_gap_share` |
-| Advisor_Agent instructions | | list the occupation names of the table |
+- Each sample employee's group equals the group of the employee's occupation in the occupations sheet.
 
 ### Decisions
 
 - **Display names.** English, make and trade name ("Toyota Corolla Cross"). The sheet's Hebrew make names (with the country) stay in the dataset.
-- **Family cars keep group A in the file.** The sheet calls their group "משפחתי". Group A makes the group filter show them to everyone (pending item 10 is unchanged), and the children threshold decides eligibility.
-- **Occupations.** The sheet's "car mandatory" column is the inverse of `car_waiver_allowed` in all 14 rows, so it is not stored. The entitlement group of an occupation is not stored either, because the employee gives the group, as in the script.
-- **The EV refund.** `net` stays the default. For the employee it is the result of the challenge's grossed-up refund, and the gross amount is a payroll matter. `taxable_gross` is the sheet's simple alternative.
-- **Participation of the new car.** The sheet's default participation is a suggestion for the representative and never an input of the engine. The employee still hears "I asked the representative" (script step 6), and the representative sees the catalog amount already in the field.
+- **Family cars keep group A in the file.** The sheet calls their group "משפחתי". Group A makes the group filter show them to everyone, and the children threshold decides eligibility.
+- **The group comes from the occupation.** The occupations sheet gives each occupation its group, and an employee knows the occupation better than an HR classification. The bot asks for the occupation and never for the group. A personal exception goes through the representative: the employee says the group differs, the bot offers to ask, and the answer becomes the Group_Override. An unlisted occupation also goes to the representative, who picks the table entry, which gives the group, the car-mandatory flag, the waiver and the maintenance in one answer.
+- **Car mandatory is stored.** It mirrors the sheet's column, so Strauss's table maps one to one. For such an occupation there is no Today without a car.
+- **The participation of a new car is the catalog's.** The challenge's examples use it directly (E-003: "participation 0 → 250"), and waiting for the representative on every question would break "an answer within a minute". The column is calculated with it and a line under the table says that the final amount is set with the representative. An employee may still ask for the representative's confirmation: the column stays calculated, marked as awaiting it, and the answer replaces the amount. A car without a Default_Participation still waits for the representative.
+- **The EV refund.** `net` stays the default and is no longer pending: the challenge says exactly +₪250 net. `taxable_gross` is the sheet's simple alternative.
 - **Today with no car.** An employee with no car has given it up, so the occupation's maintenance is the employee's Today. The sheet's employee E-003 is this case.
-- **Tests.** The six employees are data in `backend/tests/fixtures/challenge/`. One test runs them through `compare()` with the shipped config files and the real dataset, and another through `calculate_net_pay()` for the tax columns. The 4 invented payroll fixtures are replaced by the six.
+- **Tests.** The six employees are data in `backend/tests/fixtures/challenge/`. One test runs them through `compare()` with the shipped config files and the real dataset, and another through `calculate_net_pay()` for the tax columns.
 
 ## Open Questions and Pending Items
 
 ### Pending from Strauss (each has a default in use; answering means editing data or config, not code)
 
-| # | Question | Default in use | What the answer updates | After the 2026-10-12 update |
+| # | Question | Default in use | What the answer updates | Status |
 |---|---|---|---|---|
-| 1 | The family-track car price | ₪6,000 (₪4,500 is accepted) | `rules.yaml` `family_track.car_cost` | Resolved: ₪6,000 for the Kia Carnival and ₪5,600 for the Hyundai Santa Fe, per car in the catalog |
-| 2 | How the EV refund is applied in the payslip (the gross-up question) | `net`: ₪250 added to net | `rules.yaml` `ev_refund.mode` | Answered: grossed up, so the employee sees exactly ₪250. `net` gives that result. Still listed as pending, for the gross amount |
-| 3 | The net pay calculation method | `monthly`; cumulative is not implemented | `rules.yaml` `payroll.net_pay_method` | Resolved: monthly, not cumulative |
-| 4 | Does employee participation reduce the taxable usage value? | `false` | `rules.yaml` `flags.participation_reduces_usage_value` | Resolved: the sheet's tax figures match only with `false` |
-| 5 | The real car catalog, with the vehicle type code added to every car | 15 mock cars | `config/car_catalog.yaml` | Resolved: 20 cars (18 in groups A-D and 2 family-track). The sheet has no type code, and every car matches the dataset with type 1 |
-| 6 | The real occupations table | mock entries | `config/occupations.yaml` | Resolved: 14 occupations |
-| 7 | Sample employees with approved net pay | 4 fictitious fixtures | new files in `backend/tests/fixtures/` | Resolved: six employees, reproduced to the shekel |
-| 8 | Are commissions part of the pension and study-fund base? Is Car_Maintenance taxable outside that base? | `false` / `true` | `rules.yaml` `flags.*` | Resolved: commissions and bonuses are in the base, and maintenance is taxable and not pensionable |
-| 9 | The employer study-fund rate above the ₪15,712 ceiling | 7.5%, on the full base, only with an employee contribution | `rules.yaml` `payroll.study_fund.employer_rate_percent` | Moot: the sheet adds no employer deposit, so the rate is 0. Still listed as pending |
-| 10 | Which groups may see a Family_Track car? | the Family_Track cars are in group A, so everyone sees them | the group of the Family_Track cars in the catalog | Open: unchanged. The sheet's group "משפחתי" is stored as A |
-| 11 | Does an employee with no car today already receive Car_Maintenance? | Today without a car has Car_Maintenance ₪0 | to be decided | Resolved: yes, the occupation's amount (the sheet's employee E-003) |
-| 12 | Which current-car participation may come from the representative? | the representative's free-text answer is relayed, and the employee confirms the amount, which the agent then saves | none if accepted | Open: unchanged |
-| 13 | The tables of the pilot year | the challenge's 2025 tables, given for illustration | `rules.yaml` `payroll.*`; `payroll.credit_point.value` is the pending marker | New |
+| 1 | The tables of the pilot year | the challenge's 2025 tables | `rules.yaml` `payroll.*`; `payroll.credit_point.value` is the pending marker | Open |
+| 2 | Does payroll tax the employer's study fund deposit above the ceiling? | `employer_rate_percent: 0`, as in the challenge's method | `rules.yaml` `payroll.study_fund.employer_rate_percent` | Open |
+| 3 | The real car catalog, with the vehicle type code added to every car | the challenge's 20 cars | `config/car_catalog.yaml` | Open; the challenge's sheet has no type code, and every car matches with type 1 |
+| 4 | The real occupations table | the challenge's 14 occupations | `config/occupations.yaml` | Open |
+| 5 | Strauss's approved sample employees | the challenge's six | new files in `backend/tests/fixtures/` | Open |
+| 6 | Which groups may see a Family_Track car? | the Family_Track cars are in group A, so everyone sees them | the group of the Family_Track cars in the catalog | Open |
+| 7 | Which current-car participation may come from the representative? | the representative's free-text answer is relayed, and the employee confirms the amount, which the agent then saves | none if accepted | Open |
+| 8 | The EV refund | `net`: exactly ₪250 in net pay | `rules.yaml` `ev_refund.mode` | Answered by the challenge |
+| 9 | The family-track car price, the net method, the participation flag, the contribution base, Today without a car | per the challenge's data | | Resolved on 2026-10-12 |
 
-### Contradictions and gaps found in the requirements (requirements unchanged)
+### Contradictions and gaps found in the requirements
 
 1. **Req 8.7, "each displayed component differs by less than ₪1".**
    - This holds whenever the sequential nets N0..N4 share a sign, which is every realistic case.
    - The bound reaches exactly ₪1 only if a net pay crosses zero between two values ending in exactly .50.
    - Proposed: accept this edge, or reword the requirement to "at most ₪1".
-2. **Req 5.16 with Req 10.6.**
-   - The representative answers an unlisted occupation in free text, but Eligibility_Checker reads only Occupations_Table (Req 5.3, 5.12).
-   - The waiver therefore stays `pending` after the answer. The agent relays the answer, and the decision follows once Strauss adds the occupation to the table.
-3. **Req 6.4 with Req 9.6.** This is the current-car participation case; see pending item 12.
-4. **Req 4.8 and 11.7 with Req 5.9-5.10.** This is the Family_Track visibility case; see pending item 10.
-5. **Req 7.2 with Req 8.2.** This is Car_Maintenance for "Today without a car"; see pending item 11.
+2. **Req 5.16 with Req 10.6.** Resolved on 2026-10-20: the representative picks the table entry of an unlisted occupation, which the answer writes to the profile (Req 10.17), so the decision no longer stays `pending`.
+3. **Req 6.4 with Req 9.6.** This is the current-car participation case; see pending item 7.
+4. **Req 4.8 and 11.7 with Req 5.9-5.10.** This is the Family_Track visibility case; see pending item 6.
+5. **Req 7.2 with Req 8.2.** Resolved: Today without a car takes the occupation's Car_Maintenance (Req 7.2, 8.2, 8.16-8.17).
 6. **Req 13.7.**
    - Identifying a car read from a document "like a typed car" needs an agent turn.
    - After confirm, the design runs a server-side turn that adds an advisor message with no employee message.

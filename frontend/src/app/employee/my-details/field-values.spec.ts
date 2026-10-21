@@ -34,10 +34,6 @@ describe('parseValue', () => {
     ['count', '2.5', undefined],
     ['count', '-1', undefined],
     ['count', '9007199254740993', undefined],
-    ['group', 'A', 'A'],
-    ['group', 'D', 'D'],
-    ['group', 'E', undefined],
-    ['group', 'a', undefined],
     ['yes_no', 'yes', true],
     ['yes_no', 'no', false],
     ['yes_no', 'maybe', undefined],
@@ -46,7 +42,7 @@ describe('parseValue', () => {
     expect(parseValue(kind, text)).toBe(expected);
   });
 
-  it.each<FieldKind>(['group', 'yes_no', 'amount', 'percent', 'points', 'count', 'text'])(
+  it.each<FieldKind>(['yes_no', 'amount', 'percent', 'points', 'count', 'text'])(
     'reads blank %s text as a field that is cleared',
     (kind) => {
       expect(parseValue(kind, '')).toBeNull();
@@ -62,7 +58,6 @@ describe('formatValue', () => {
     ['yes_no', null, ''],
     ['count', 0, '0'],
     ['amount', '14200.50', '14200.50'],
-    ['group', 'C', 'C'],
     ['text', null, ''],
   ])('writes %s value %j as %j', (kind, value, expected) => {
     expect(formatValue(kind, value)).toBe(expected);

@@ -13,6 +13,7 @@ from car_advisor.conversations.profile import (
     validate_profile,
 )
 from car_advisor.engine import copy_he
+from car_advisor.engine.config import OccupationsTable
 from car_advisor.engine.types import (
     CarKey,
     CurrentCarDescription,
@@ -23,7 +24,7 @@ from car_advisor.engine.types import (
 
 CAR_KEY = CarKey.parse("2026-2020-1-01229-00001")
 
-GROUP_AND_SALARY = (MissingField.ELIGIBILITY_GROUP, MissingField.BASE_SALARY)
+OCCUPATION_AND_SALARY = (MissingField.OCCUPATION, MissingField.BASE_SALARY)
 PAY_DETAILS = (
     MissingField.PAY_COMPONENTS,
     MissingField.PENSION_RATE,
@@ -33,7 +34,7 @@ PAY_DETAILS = (
 CURRENT_CAR_DETAILS = (MissingField.CURRENT_CAR, MissingField.CURRENT_CAR_PARTICIPATION)
 ALTERNATIVE = ScriptStep(ALTERNATIVE_STEP, ())
 
-STEP_1: dict[str, object] = {"eligibility_group": Group.B, "base_salary": Decimal("16000")}
+STEP_1: dict[str, object] = {"occupation": "Office administration", "base_salary": Decimal("16000")}
 STEP_2: dict[str, object] = {
     # An empty list means the employee has none, which counts as provided.
     "pay_components": [],
@@ -52,6 +53,32 @@ IDENTIFIED_CAR: dict[str, object] = {"has_current_car": True, "current_car_key":
 REJECTED_SALARY = "-98765"
 
 
+OCCUPATIONS = OccupationsTable.model_validate(
+    {
+        "occupations": [
+            {
+                "name": "Office administration",
+                "group": "B",
+                "car_mandatory": False,
+                "car_waiver_allowed": True,
+                "car_maintenance": 1500,
+            },
+            {
+                "name": "Field sales",
+                "group": "B",
+                "car_mandatory": True,
+                "car_waiver_allowed": False,
+                "car_maintenance": 0,
+            },
+        ]
+    }
+)
+
+
+def step(profile: EmployeeProfile, open_fields: Collection[MissingField] = ()) -> ScriptStep:
+    return script_step(profile, open_fields, OCCUPATIONS)
+
+
 def profile_of(*parts: Mapping[str, object]) -> EmployeeProfile:
     return EmployeeProfile.model_validate(
         {key: value for part in parts for key, value in part.items()}
@@ -60,12 +87,12 @@ def profile_of(*parts: Mapping[str, object]) -> EmployeeProfile:
 
 def test_the_steps_come_in_the_order_of_the_script() -> None:
     walked = [
-        script_step(profile_of(*given), ())
+        step(profile_of(*given))
         for given in ((), (STEP_1,), (STEP_1, STEP_2), (STEP_1, STEP_2, STEP_3))
     ]
 
     assert walked == [
-        ScriptStep(1, GROUP_AND_SALARY),
+        ScriptStep(1, OCCUPATION_AND_SALARY),
         ScriptStep(2, PAY_DETAILS),
         ScriptStep(3, CURRENT_CAR_DETAILS),
         ALTERNATIVE,
@@ -78,21 +105,21 @@ def test_the_steps_come_in_the_order_of_the_script() -> None:
         pytest.param((STEP_1, STEP_2), ScriptStep(3, CURRENT_CAR_DETAILS), id="steps-1-and-2"),
         pytest.param((STEP_1, STEP_2, STEP_3), ALTERNATIVE, id="steps-1-to-3"),
         pytest.param((STEP_1, STEP_3), ScriptStep(2, PAY_DETAILS), id="step-2-left-open"),
-        pytest.param((STEP_2,), ScriptStep(1, GROUP_AND_SALARY), id="later-step-first"),
-        pytest.param((STEP_3,), ScriptStep(1, GROUP_AND_SALARY), id="car-first"),
+        pytest.param((STEP_2,), ScriptStep(1, OCCUPATION_AND_SALARY), id="later-step-first"),
+        pytest.param((STEP_3,), ScriptStep(1, OCCUPATION_AND_SALARY), id="car-first"),
     ],
 )
 def test_several_fields_given_at_once_satisfy_every_step_they_cover(
     given: tuple[Mapping[str, object], ...], expected: ScriptStep
 ) -> None:
-    assert script_step(profile_of(*given), ()) == expected
+    assert step(profile_of(*given)) == expected
 
 
 @pytest.mark.parametrize(
     ("cleared", "expected"),
     [
-        pytest.param("eligibility_group", ScriptStep(1, GROUP_AND_SALARY[:1]), id="group"),
-        pytest.param("base_salary", ScriptStep(1, GROUP_AND_SALARY[1:]), id="salary"),
+        pytest.param("occupation", ScriptStep(1, OCCUPATION_AND_SALARY[:1]), id="occupation"),
+        pytest.param("base_salary", ScriptStep(1, OCCUPATION_AND_SALARY[1:]), id="salary"),
         pytest.param("pay_components", ScriptStep(2, PAY_DETAILS[:1]), id="pay-components"),
         pytest.param("pension_rate_percent", ScriptStep(2, PAY_DETAILS[1:2]), id="pension"),
         pytest.param("study_fund_rate_percent", ScriptStep(2, PAY_DETAILS[2:3]), id="study-fund"),
@@ -106,22 +133,23 @@ def test_several_fields_given_at_once_satisfy_every_step_they_cover(
 def test_a_stored_field_is_never_listed(cleared: str, expected: ScriptStep) -> None:
     stored = {**STEP_1, **STEP_2, **STEP_3, cleared: None}
 
-    assert script_step(EmployeeProfile.model_validate(stored), ()) == expected
+    assert step(EmployeeProfile.model_validate(stored)) == expected
 
 
 @pytest.mark.parametrize(
     ("car", "expected"),
     [
         pytest.param({}, ScriptStep(3, CURRENT_CAR_DETAILS), id="not-answered"),
+        pytest.param({"has_current_car": False}, ALTERNATIVE, id="no-car-with-an-occupation"),
         pytest.param(
-            {"has_current_car": False},
-            ScriptStep(3, (MissingField.OCCUPATION,)),
-            id="no-car-asks-for-the-occupation",
+            {"has_current_car": False, "occupation": "Field sales"},
+            ScriptStep(3, CURRENT_CAR_DETAILS),
+            id="no-car-in-an-occupation-with-a-mandatory-car",
         ),
         pytest.param(
-            {"has_current_car": False, "occupation": "Office administration"},
-            ALTERNATIVE,
-            id="no-car-with-an-occupation",
+            {"has_current_car": False, "occupation": "Gardener"},
+            ScriptStep(1, (MissingField.OCCUPATION,)),
+            id="an-unlisted-occupation-is-asked-again",
         ),
         pytest.param(
             {
@@ -155,7 +183,7 @@ def test_a_stored_field_is_never_listed(cleared: str, expected: ScriptStep) -> N
 def test_the_current_car_step_follows_whether_there_is_a_car(
     car: Mapping[str, object], expected: ScriptStep
 ) -> None:
-    assert script_step(profile_of(STEP_1, STEP_2, car), ()) == expected
+    assert step(profile_of(STEP_1, STEP_2, car)) == expected
 
 
 @pytest.mark.parametrize(
@@ -197,6 +225,12 @@ def test_the_current_car_step_follows_whether_there_is_a_car(
             ScriptStep(3, CURRENT_CAR_DETAILS[1:]),
             id="question-about-a-field-outside-the-steps",
         ),
+        pytest.param(
+            (STEP_1, {"occupation": "Gardener"}),
+            {MissingField.OCCUPATION},
+            ScriptStep(2, PAY_DETAILS),
+            id="unlisted-occupation-sent-to-the-representative",
+        ),
     ],
 )
 def test_a_step_is_skipped_when_its_missing_fields_have_an_open_question(
@@ -204,7 +238,7 @@ def test_a_step_is_skipped_when_its_missing_fields_have_an_open_question(
     open_fields: Collection[MissingField],
     expected: ScriptStep,
 ) -> None:
-    assert script_step(profile_of(*given), open_fields) == expected
+    assert step(profile_of(*given), open_fields) == expected
 
 
 def test_a_valid_change_set_becomes_the_profile() -> None:

@@ -13,7 +13,8 @@ family_track:
 ev_refund:
   amount: 250
   # net: net pay rises by exactly the amount, which is what the challenge's grossed-up refund gives
-  # the employee. The gross amount that payroll pays is not calculated.
+  # the employee. The gross amount that payroll pays is not calculated. Not pending: the challenge
+  # answers it.
   # taxable_gross: the amount is taxable pay, the challenge's simple alternative.
   mode: net                                  # net | taxable_gross
 
@@ -62,9 +63,6 @@ payroll:
 
 # A default must equal the current value of its field, or the file is rejected; edit both together.
 pending:
-  - field: ev_refund.mode
-    default: net
-    question: Does payroll gross up the refund so that the employee sees exactly 250 net, as the challenge says? The advisor adds the exact amount to net pay and does not calculate the gross amount.
   - field: payroll.credit_point.value
     default: 242
     question: The tax tables are the challenge's 2025 tables, given for illustration. Strauss to confirm the tables of the pilot year; this value stands for all of them.

@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 from pydantic_ai import Agent, ModelRetry, RunContext, models
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from pydantic_ai.models.test import TestModel as StubModel
@@ -72,11 +73,11 @@ TESLA_KEY = CarKey.parse("2026-2025-1-01327-00730")  # group D, electric
 NIRO_KEY = CarKey.parse("2026-2025-1-00885-00619")  # group B, hybrid
 PICANTO_KEY = CarKey.parse("2026-2025-1-00885-00643")  # group A, conventional
 
-# A group C employee without a car today: the only thing that a new car in the regular track
-# lacks is its Participation, which only Transport_Rep gives. Today without a car pays the
-# maintenance of the occupation, so NO_CAR_EMPLOYEE adds one.
+# A product manager, so group C, without a car today. A new catalog car takes the catalog's
+# participation, and Today without a car pays the maintenance of the occupation.
+PRODUCT_MANAGER = "מנהל/ת מוצר"
 EMPLOYEE: dict[str, object] = {
-    "eligibility_group": "C",
+    "occupation": PRODUCT_MANAGER,
     "base_salary": "16000",
     "pay_components": [],
     "pension_rate_percent": "6",
@@ -85,7 +86,7 @@ EMPLOYEE: dict[str, object] = {
     "children_under_23": 0,
     "has_current_car": False,
 }
-NO_CAR_EMPLOYEE: dict[str, object] = {**EMPLOYEE, "occupation": "מנהל/ת מוצר"}
+NO_CAR_EMPLOYEE: dict[str, object] = EMPLOYEE
 # A salary that no number of a tool result or of a log line can equal by chance.
 SALARY = 1234567
 
@@ -246,7 +247,7 @@ def test_a_broad_search_gives_the_first_candidates_and_the_number_of_matches(
 def test_the_catalog_lists_the_groups_up_to_the_employees_with_the_powertrain_of_each_car(
     ctx: RunContext[AdvisorDeps], service: ConversationService
 ) -> None:
-    service.update_profile(ctx.deps.conversation_id, {"eligibility_group": "C"})
+    service.update_profile(ctx.deps.conversation_id, {"occupation": PRODUCT_MANAGER})
 
     result = list_catalog_cars(ctx)
 
@@ -263,18 +264,34 @@ def test_the_catalog_lists_the_groups_up_to_the_employees_with_the_powertrain_of
     assert by_key[ATTO_3_KEY].powertrain is Powertrain.ELECTRIC
     assert by_key[NIRO_KEY].powertrain is Powertrain.HYBRID
     assert by_key[PICANTO_KEY].powertrain is Powertrain.CONVENTIONAL
+    # The catalog's participation, in whole shekels (BYD Atto 3: 300).
+    assert by_key[ATTO_3_KEY].catalog_participation == 300
     assert [item.display_name for item in result.cars if item.family_track] == [
         "Kia Carnival",
         "Hyundai Santa Fe",
     ]
 
 
-def test_without_a_stored_group_there_are_no_cars_and_the_field_is_named(
+def test_without_a_known_occupation_there_are_no_cars_and_the_occupation_is_named(
     ctx: RunContext[AdvisorDeps],
 ) -> None:
     assert list_catalog_cars(ctx) == CatalogToolResult(
-        cars=[], missing=FieldLabel.of(MissingField.ELIGIBILITY_GROUP)
+        cars=[], missing=FieldLabel.of(MissingField.OCCUPATION)
     )
+
+
+def test_a_group_of_the_representative_replaces_the_group_of_the_occupation(
+    ctx: RunContext[AdvisorDeps], service: ConversationService
+) -> None:
+    conversation_id = ctx.deps.conversation_id
+    service.update_profile(conversation_id, {"occupation": PRODUCT_MANAGER})
+    with service.transaction() as session:
+        service.apply_rep_answer(session, conversation_id, {"eligibility_group": "D"})
+
+    result = list_catalog_cars(ctx)
+
+    assert isinstance(result, CatalogToolResult)
+    assert TESLA_KEY in {item.car_key for item in result.cars}
 
 
 @pytest.fixture
@@ -310,7 +327,8 @@ def test_a_waiver_follows_the_occupations_table(
 def test_a_car_of_a_higher_group_is_not_eligible(
     ctx: RunContext[AdvisorDeps], service: ConversationService
 ) -> None:
-    service.update_profile(ctx.deps.conversation_id, {"eligibility_group": "B"})
+    # A software developer is group B.
+    service.update_profile(ctx.deps.conversation_id, {"occupation": "מפתח/ת תוכנה"})
 
     assert check_eligibility(ctx, car(TESLA_KEY)) == EligibilityToolResult(
         status="not_eligible",
@@ -325,8 +343,8 @@ def test_missing_inputs_are_listed_by_label_and_no_decision_is_given(
 ) -> None:
     assert check_eligibility(ctx, car(ATTO_3_KEY)) == EligibilityToolResult(
         status="missing",
-        reason=copy_he.missing_data([MissingField.ELIGIBILITY_GROUP]),
-        missing=[FieldLabel.of(MissingField.ELIGIBILITY_GROUP)],
+        reason=copy_he.missing_data([MissingField.OCCUPATION]),
+        missing=[FieldLabel.of(MissingField.OCCUPATION)],
         is_electric=True,
     )
 
@@ -363,7 +381,7 @@ def test_asking_twice_returns_the_same_open_question(
     assert isinstance(second, RepSent)
     assert (first.created, second.created) == (True, False)
     assert second.question_id == first.question_id
-    [question] = list_for_rep(sessions)
+    [question] = list_for_rep(sessions, ctx.deps.config)
     assert question.id == first.question_id
     label = copy_he.MISSING_FIELD_LABELS[MissingField.CURRENT_CAR_PARTICIPATION]
     assert first.employee_notice == second.employee_notice == copy_he.rep_question_sent(label)
@@ -395,14 +413,15 @@ def test_a_participation_question_names_the_car_and_marks_it_as_sent(
 
     assert isinstance(result, RepSent)
     assert result.employee_notice == copy_he.rep_question_sent(copy_he.MISSING_FIELD_LABELS[field])
-    [question] = list_for_rep(sessions)
+    [question] = list_for_rep(sessions, ctx.deps.config)
     assert question.car is not None
     assert question.car.car_key == ATTO_3_KEY
     comparison = service.state(ctx.deps.conversation_id).comparison
     assert comparison is not None
     column = comparison.alternatives[0]
-    assert column.status == "pending"
-    assert {item.field: item.sent_to_rep for item in column.missing} == {field: True}
+    # A confirmation question keeps the column on the catalog's amount, marked as awaited.
+    assert column.status == "calculated"
+    assert (column.participation_source, column.participation_awaiting_rep) == ("catalog", True)
 
 
 @pytest.mark.usefixtures("employee")
@@ -431,9 +450,7 @@ def test_a_storage_failure_returns_the_not_sent_sentence_and_the_comparison_says
     assert stored_questions(sessions) == []
     comparison = service.state(ctx.deps.conversation_id).comparison
     assert comparison is not None
-    assert {item.field: item.sent_to_rep for item in comparison.alternatives[0].missing} == {
-        field: False
-    }
+    assert comparison.alternatives[0].participation_awaiting_rep is False
     [line] = logged(caplog)
     assert (line["tool"], line["ok"]) == ("ask_rep", False)
 
@@ -523,7 +540,7 @@ def test_an_occupation_that_is_not_in_the_table_goes_to_the_representative(
     result = ask_rep(ctx, RepField.OCCUPATION)
 
     assert isinstance(result, RepSent)
-    [question] = list_for_rep(sessions)
+    [question] = list_for_rep(sessions, ctx.deps.config)
     assert "רופא שיניים" in question.question_text
 
 
@@ -533,7 +550,6 @@ def test_valid_fields_are_saved_and_echoed_and_invalid_ones_come_back_with_their
     result = update_profile(
         ctx,
         changes(
-            eligibility_group="E",
             base_salary=14200,
             pension_rate_percent=101,
             credit_points=2.25,
@@ -545,13 +561,19 @@ def test_valid_fields_are_saved_and_echoed_and_invalid_ones_come_back_with_their
     assert result == ProfileUpdateResult(
         saved={"base_salary": "14200", "credit_points": "2.25"},
         rejected=[
-            RejectedField(field="eligibility_group", allowed=ranges["eligibility_group"]),
             RejectedField(field="pension_rate_percent", allowed=ranges["pension_rate_percent"]),
             RejectedField(field="children_under_23", allowed=ranges["children_under_23"]),
         ],
     )
     stored = service.state(ctx.deps.conversation_id).profile
     assert stored == EmployeeProfile(base_salary=Decimal(14200), credit_points=Decimal("2.25"))
+
+
+def test_the_model_cannot_send_a_group() -> None:
+    with pytest.raises(ValidationError) as caught:
+        changes(eligibility_group="D")
+
+    assert [error["loc"] for error in caught.value.errors()] == [("eligibility_group",)]
 
 
 def test_a_correction_replaces_the_stored_value(
@@ -693,8 +715,11 @@ def test_a_call_writes_one_line_with_the_tool_the_outcome_the_duration_and_the_c
     assert line["duration_ms"] >= 0
 
 
-def test_the_model_names_the_profile_fields_as_the_profile_does() -> None:
-    assert list(ProfileChanges.model_fields) == list(EmployeeProfile.model_fields)
+def test_the_model_names_the_profile_fields_as_the_profile_does_without_the_group() -> None:
+    # The group follows from the occupation, so the model is given no field to save one in.
+    profile_fields = [name for name in EmployeeProfile.model_fields if name != "eligibility_group"]
+
+    assert list(ProfileChanges.model_fields) == profile_fields
 
 
 def test_every_tool_and_every_powertrain_has_its_hebrew_label() -> None:

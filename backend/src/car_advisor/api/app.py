@@ -148,10 +148,25 @@ def start_services(settings: Settings, config: AppConfig, engine: Engine) -> Ser
     lookup = CarLookup(sessions, settings.tax_year)
     import_dataset_if_missing(sessions, settings)
     with _stage("catalog_check"):
-        check_catalog(lookup, config.catalog)
+        warnings = check_catalog(lookup, config.catalog)
+    # A differing usage value is a warning only: the app starts and calculates with the dataset's
+    # value, so that a wrong model code in Strauss's catalog shows without stopping it (Req 4.19).
+    for mismatch in warnings:
+        logger.warning(
+            "catalog_usage_value_mismatch",
+            extra={
+                "stage": "catalog_check",
+                "display_name": mismatch.display_name,
+                "car_key": str(mismatch.car_key),
+                "catalog_usage_value": mismatch.catalog_usage_value,
+                "dataset_usage_value": mismatch.dataset_usage_value,
+            },
+        )
     conversations = ConversationService(sessions, lookup, config)
     runner = AgentRunner(build_agent(settings), conversations, lookup, config)
-    return Services(settings, config, sessions, lookup, conversations, runner)
+    return Services(
+        settings, config, sessions, lookup, conversations, runner, catalog_warnings=tuple(warnings)
+    )
 
 
 @asynccontextmanager

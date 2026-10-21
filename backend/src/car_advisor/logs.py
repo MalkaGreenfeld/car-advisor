@@ -22,6 +22,11 @@ _FIELD_KEYS: Final = (
     "tax_year",
     "record_count",
     "fields",
+    # The catalog check (Req 4.19): a catalog car and two usage values, never employee data.
+    "display_name",
+    "car_key",
+    "catalog_usage_value",
+    "dataset_usage_value",
 )
 _HANDLER_NAME: Final = "car_advisor.stdout"
 

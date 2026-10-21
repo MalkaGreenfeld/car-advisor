@@ -6,6 +6,11 @@
   margin: 0;
   color: var(--color-text-muted);
 }
+.catalog-note {
+  margin: var(--space-2) 0 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
 
 .scroll {
   overflow-x: auto;
@@ -57,12 +62,14 @@ td ul {
 
 .detail,
 .note,
+.source,
 .tag {
   font-size: 0.875rem;
   color: var(--color-text-muted);
 }
 
-.note {
+.note,
+.source {
   display: block;
   text-wrap: balance;
 }

@@ -18,6 +18,7 @@ from car_advisor.conversations.service import (
     ConversationNotFound,
     ConversationService,
     ConversationState,
+    EmployeeGroup,
     MessageRole,
     NewMessage,
     NoticeCode,
@@ -74,6 +75,7 @@ def test_a_created_conversation_has_an_empty_state(service: ConversationService)
         id=conversation_id,
         messages=(),
         profile=EmployeeProfile(),
+        employee_group=EmployeeGroup(group=None, source=None),
         alternatives=(),
         comparison=None,
         open_questions=(),
@@ -256,8 +258,40 @@ def test_the_state_shows_what_the_conversation_stores(
     state = service.state(conversation_id)
 
     assert state.profile == profile
+    # A stored group is the representative's Group_Override.
+    assert state.employee_group == EmployeeGroup(group=Group.B, source="representative")
     assert state.alternatives == tuple(alternatives)
     assert state.comparison == comparison
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        pytest.param({"occupation": "מפתחת תוכנה"}, EmployeeGroup(Group.B, "occupation"), id="occ"),
+        pytest.param(
+            {"occupation": "מפתח/ת תוכנה", "eligibility_group": "D"},
+            EmployeeGroup(Group.D, "representative"),
+            id="override",
+        ),
+        pytest.param({"occupation": "Gardener"}, EmployeeGroup(None, None), id="unlisted"),
+        pytest.param({}, EmployeeGroup(None, None), id="nothing"),
+    ],
+)
+def test_the_state_carries_the_group_in_use_and_its_source(
+    stored: dict[str, str],
+    expected: EmployeeGroup,
+    service: ConversationService,
+    sessions: sessionmaker[Session],
+) -> None:
+    conversation_id = service.create()
+    with sessions.begin() as session:
+        session.execute(
+            update(ConversationRow)
+            .where(ConversationRow.id == conversation_id)
+            .values(profile=EmployeeProfile.model_validate(stored).model_dump_json())
+        )
+
+    assert service.state(conversation_id).employee_group == expected
 
 
 def test_the_open_questions_are_those_of_this_conversation_without_an_answer(

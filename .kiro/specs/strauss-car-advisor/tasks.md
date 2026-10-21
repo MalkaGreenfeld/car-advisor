@@ -1082,17 +1082,18 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
       - `ss -ltn` shows the app's ports bound only to `127.0.0.1`
     - _Requirements: 14.1, 14.2, 14.7, 14.9, 14.10, 14.11, 14.15, 14.16_
 
-  - [~] 16.2 Run the challenge script end-to-end
+  - [ ] 16.2 Run the challenge script end-to-end (**deferred to cloud deployment**)
     - At `http://127.0.0.1:8080/employee`, follow the challenge script:
       1. the profile steps, then the current car identified from confirmed candidates;
-      2. an EV alternative whose participation the employee does not know. Check the "I asked the representative" sentence and the `pending` column;
-      3. answer on `/rep` with an amount and an effective date;
-      4. the conversation resumes by itself, with a reply and a calculated EV column: ₪250 EV_Refund, the breakdown and the Explanation
+      2. an EV alternative from the catalog. The column is calculated at once with the catalog's participation (₪250 EV_Refund, the breakdown and the Explanation), and the line under the table says the final amount is set with the representative;
+      3. the employee asks for the representative's confirmation. Check the "I asked the representative" sentence, and that the column stays calculated and is marked as awaiting the confirmation;
+      4. answer on `/rep` (the amount field starts with the catalog amount) with another amount and an effective date;
+      5. the conversation resumes by itself, with a reply and the column recalculated with the representative's amount and its effective date
     - In the logs, check each turn's `duration_ms` against the 8 s target, and check that the full script takes about a minute
-    - Then ask the six questions of the challenge's sheet "עובדים לדוגמה" in the same way, answering the participation question with the car's amount from the catalog. Each net figure and each difference equals the sheet "חישובים" to the shekel
+    - Then ask the six questions of the challenge's sheet "עובדים לדוגמה" in the same way, giving the occupation and not the group. Each net figure and each difference equals the sheet "חישובים" to the shekel, with no question to the representative
     - _Requirements: 9.11, 9.12, 10.10, 10.11, 10.12, 10.13, 11.5, 12.8_
 
-  - [~] 16.3 Run the group B waiver scenario
+  - [ ] 16.3 Run the group B waiver scenario (**deferred to cloud deployment**)
     - A group B employee whose occupation allows the waiver asks to give up the car
       - The reply gives the decision and the reason.
       - The table shows Car_Maintenance and the Net_Pay difference.
@@ -1109,19 +1110,19 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
     - `./check.sh` exits 0 with `OPENAI_API_KEY` empty and with no network, for example under `unshare -rn ./check.sh`
     - _Requirements: 15.5, 15.14_
 
-  - [~] 16.6 Remove the handoff folder
+  - [ ] 16.6 Remove the handoff folder (**deferred: depends on 16.2–16.3**)
     - Once 16.1-16.5 pass, ask the user to confirm, then delete `.kiro/handoff/`. The folder is git-ignored, so the deletion cannot be undone
     - Verify: `.kiro/handoff/` no longer exists
     - _Requirements: 14.13_
 
 - [ ] 17. Apply the updated challenge data (October 2026)
-  - Requirement 18 and the design section "Update: October 2026 Challenge Data" describe the change. Do this task before 16.2 and 16.3, because the live runs must use the new data.
+  - The requirements and the design section "Challenge Data and Review" describe the change. Do this task before 16.2 and 16.3, because the live runs must use the new data.
   - `מעודכן/` holds the updated PDF, the Excel workbook and the rules JSON. Copy the data into the repository's own files. Nothing reads that folder at run time.
   - Every sub-task ends with the tests of its area passing. `tests/test_docs.py` compares the documentation with the rules and the engine, so it fails from 17.1 until 17.8 updates the documentation. `./check.sh` runs everything again in 17.9.
 
   - [x] 17.1 Load the challenge's payroll parameters and simplify the rules schema
     - `config/rules.yaml`:
-      - the tax brackets, the National Insurance and health tax threshold and ceiling, and the pension credit ceiling of Req 18.6, with a `source` text that names the challenge's rules file `mock-2026-10-12` and says that its tables are the 2025 ones (the study fund keeps its public source);
+      - the tax brackets, the National Insurance and health tax threshold and ceiling, and the pension credit ceiling of Req 3.13, with a `source` text that names the challenge's rules file `mock-2026-10-12` and says that its tables are the 2025 ones (the study fund keeps its public source);
       - remove `family_track.car_cost`;
       - rename the flag to `variable_pay_in_contribution_base` and set it to `true`;
       - set `payroll.study_fund.employer_rate_percent` to 0, with a comment that the challenge's method adds no employer deposit;
@@ -1138,7 +1139,7 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
       - the `DENYLIST` of `tests/test_structure.py` (16150, 22440, 7522, 50695 and 9500 replace 19000, 25100, 7703, 51910 and 9700)
     - Recompute the expected values of the four files in `tests/fixtures/payroll/` for the new parameters, by hand and not with `payroll.py`, with the working in the comments
     - Verify: `uv run pytest tests/engine tests/rules` passes
-    - _Requirements: 18.6, 18.7, 18.9, 18.10, 18.11, 18.15_
+    - _Requirements: 3.13, 3.4, 3.10, 3.13, 3.7, 3.15_
 
   - [x] 17.2 Load the challenge's catalog and occupations
     - `car_advisor/engine/config.py`:
@@ -1158,7 +1159,7 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
       - `tests/dataset/test_catalog_check.py`: the shipped catalog passes against the real file;
       - the tests that name the old mock cars switch to the new ones: the old group C Tesla Model 3 becomes the BYD Atto 3 (group C, electric), the Corolla Hybrid becomes the Kia Niro (group B, hybrid), the Picanto and the Tucson keep their names with their 2025 keys, and the Ioniq becomes the BYD Seal (group D, electric). The files are `tests/agent/test_tools.py`, `test_runner.py`, `test_scenarios.py`, `test_advisor.py`, `tests/conversations/test_recalculation.py`, `test_rep_questions.py`, `tests/api/test_rep.py`, `tests/test_mssql_smoke.py`, and the costs and usage values in their expectations
     - Verify: `uv run pytest` passes except `tests/test_docs.py`, which task 17.8 updates
-    - _Requirements: 18.1, 18.2, 18.3, 18.4_
+    - _Requirements: 4.1, 4.2, 4.10, 5.12_
 
   - [x] 17.3 Count the participation of a family-track car, and the maintenance of Today without a car
     - `car_advisor/engine/comparison.py`:
@@ -1170,7 +1171,7 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
     - Tests:
       - `tests/engine/test_comparison.py`: a family car with and without a rep answer, a gap of 0, the two shares and the participation as three amounts, the sum in the net pay, Today with no car for an occupation that allows the waiver and one that does not, and an unknown occupation;
       - `tests/engine/test_breakdown.py` and `tests/conversations/test_recalculation.py`: the family column and Today with no car
-    - _Requirements: 18.8, 18.12_
+    - _Requirements: 6.8, 8.16_
 
   - [x] 17.4 Add the six challenge employees as golden tests
     - `tests/fixtures/challenge/employees.yaml`: for E-001 to E-006 the profile, the current car or the waiver, the alternative, and the reference values of the sheet "חישובים": net Today, net of the Alternative, the difference, the income tax of both, and National Insurance plus health tax of both. The profile lists the occupation, so that E-003 has its Today maintenance
@@ -1179,25 +1180,25 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
       - runs each employee through `calculate_net_pay()` and checks the tax and National Insurance plus health tax of Today, and of the two Alternatives without an EV_Refund (E-002 and E-005);
       - E-002 checks the gap shares 1,150 and 1,150, and E-003 checks Today with no car
     - Verify: all 12 nets equal the sheet after rounding to whole shekels
-    - _Requirements: 18.16_
+    - _Requirements: 7.15_
 
   - [x] 17.5 Give the agent the occupation names
     - `car_advisor/agent/advisor.py`: the instructions list the occupation names of the table, tell the agent to save the table's name when the employee's words clearly name one entry, and to show the list and ask when the words fit several entries or none. The rule for an occupation that is stored but missing from the table stays
     - `car_advisor/agent/tools.py`: the docstring of `ProfileChanges.occupation` says to use the table's name
     - The instructions also tell the agent that Today with no car needs the occupation, and to ask for it when the comparison lists it as missing
     - Tests: `tests/agent/test_advisor.py` checks that all 14 names are in the instructions; `tests/agent/test_scenarios.py` runs an employee with no car whose Today waits for the occupation
-    - _Requirements: 18.5, 18.12_
+    - _Requirements: 9.19, 8.16_
 
-  - [ ] 17.6 Suggest the catalog participation to the representative
+  - [x] 17.6 Suggest the catalog participation to the representative (done in task 18.5)
     - `car_advisor/api/rep.py` and `car_advisor/api/schemas.py`: a participation question about a catalog car carries `suggested_amount`, the car's `default_participation`. Other questions carry `null`
     - `app/shared/api-models.ts`, `app/rep/answer-values.ts`, `app/rep/answer-form.*` and `app/rep/rep.copy.ts`: show "in the catalog: ₪300" next to the amount field and start the field with that amount. The effective date stays empty and required
     - Tests: `tests/api/test_rep.py` for the amount and the `null`, and the specs of the answer form and the rep question for the hint and the starting value
-    - _Requirements: 18.2, 18.13_
+    - _Requirements: 4.2, 12.6_
 
   - [x] 17.7 Show the employee's share of the gap in the table
     - `app/shared/api-models.ts`, `app/employee/comparison/comparison.copy.ts`, `comparison-table.*`: the row "חלק העובד בפער", next to "חלק המעסיק בפער", only when a column has a Family_Track car. The testing state in `app/employee/testing/conversation-state.ts` gets the field
     - `comparison-table.spec.ts` checks the row for a family column, and that the row is absent without one
-    - _Requirements: 18.14_
+    - _Requirements: 11.20_
 
   - [x] 17.8 Update the documentation
     - `README.md` and `.env.example`: the data files are the challenge's, and where Strauss's files go
@@ -1208,12 +1209,53 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
       - the open questions: the three pending items and the assumptions of Req 18, with the resolved ones listed as resolved;
       - a short passage about the participation that the representative sees as a suggestion
     - `tests/test_docs.py`: the rules table, the worked example against `compare()` for E-001, and the open questions
-    - _Requirements: 17.4, 17.13, 17.14, 18.17_
+    - _Requirements: 17.4, 17.13, 17.14, 17.4_
 
   - [x] 17.9 Run the full check again
     - `./check.sh` exits 0, and `TEST_MSSQL_URL=... uv run pytest -m mssql` passes
     - A clean start of the Compose stack in a separate project name loads the new catalog without `CatalogMismatch`, and `/api/health` returns 200
-    - _Requirements: 4.6, 15.5, 18.1_
+    - _Requirements: 4.6, 15.5, 4.1_
+
+- [ ] 18. Apply the requirements review (2026-10-20)
+  - The requirements and the design section "Challenge Data and Review" describe the change. Do this task before 16.2 and 16.3.
+
+  - [x] 18.1 Store the occupation's group and "car mandatory", and the catalog's usage value
+    - `config/occupations.yaml`: `group` and `car_mandatory` for the 14 occupations, from the sheet "עיסוקים"
+    - `config/car_catalog.yaml`: `usage_value` for the 20 cars, from the sheet "קטלוג רכבים"
+    - `car_advisor/engine/config.py`: `Occupation.group`, `Occupation.car_mandatory` (rejected together with an allowed waiver), `CatalogCar.usage_value`
+    - `config/rules.yaml`: `ev_refund.mode` leaves `pending`; the comments name the 2025 tables
+    - Tests: `tests/engine/test_config.py`, `tests/rules/test_data_files.py`, `tests/rules/test_rules_file.py`
+    - _Requirements: 3.7, 3.15, 4.2, 4.10, 4.16_
+
+  - [x] 18.2 Take the group from the occupation, and the participation of a new car from the catalog
+    - `car_advisor/engine/eligibility.py`: `employee_group()`; the missing field is `occupation`
+    - `car_advisor/engine/comparison.py`: the participation order (current car, rep answer, catalog, missing), its source and `participation_awaiting_rep`; the budget from `employee_group()`; Today without a car pending on `current_car` for a car-mandatory occupation
+    - Tests: `tests/engine/test_eligibility.py`, `test_comparison.py`, `test_challenge_employees.py` (no rep answer), `test_rule_examples.py`
+    - _Requirements: 5.7, 5.23, 6.3-6.5, 6.10, 6.23, 6.25, 8.16, 8.17_
+
+  - [x] 18.3 Check the catalog's usage values at startup
+    - `car_advisor/dataset/lookup.py`: `check_catalog` returns the mismatches; `api/app.py` logs `catalog_usage_value_mismatch` per car and keeps them on `Services`; `api/health.py` returns `catalog_warnings`
+    - Tests: `tests/dataset/test_catalog_check.py`, `tests/api/test_health.py`, `tests/api/test_startup.py`
+    - _Requirements: 4.18, 4.19, 14.9_
+
+  - [x] 18.4 Let only the representative set the group, and add the choice answers
+    - Migration `0002`: `rep_questions.answer_choice`, and `occupation_waiver` becomes `occupation`
+    - `car_advisor/conversations/service.py`: the employee's changes reject `eligibility_group`; `apply_rep_answer`; the state carries the employee's group and its source; `script_step` takes the occupations, with the occupation in step 1
+    - `car_advisor/conversations/rep_questions.py`: the types `occupation` and `eligibility_group`, `ChoiceAnswer`, the profile write in the answer's transaction, `choices` and `suggested_amount` in the view
+    - Tests: `tests/conversations/*`, `tests/api/test_rep.py`, `tests/api/test_conversations.py`
+    - _Requirements: 9.1, 10.6, 10.17, 11.2, 12.5, 12.6_
+
+  - [x] 18.5 Update the agent and the screens
+    - `car_advisor/agent/advisor.py` and `tools.py`: no group from the employee, the dispute and the unlisted occupation go to `ask_rep`, the catalog participation, the car-mandatory occupation, the notes of the choice answers
+    - Frontend: My Details shows the group read-only with its source and suggests the occupations (`GET /api/occupations`); the comparison table shows the participation's source line and the awaiting marker; the rep form has the choice field and the catalog amount
+    - Tests: `tests/agent/*`, and the specs of `my-details`, `comparison-table`, `answer-form` and `rep-question`
+    - _Requirements: 6.26, 9.19, 9.20, 11.18, 11.19, 12.6_
+
+  - [x] 18.6 Update the documentation and run the full check
+    - `docs/explanations.he.md` and `README.md`: the group from the occupation, the catalog participation, the usage-value check, car mandatory, the EV refund as answered, the 2025 tables
+    - `tests/test_docs.py`; `./check.sh` exits 0
+    - _Requirements: 15.5, 17.10, 17.13_
+    - **Note:** `test_docs.py` (12 passed), ruff check, ruff format, pytest (1285 passed), ng lint, ng test (416 passed) and prettier (with `--end-of-line auto`) all pass individually. `./check.sh` as a single script was not run because of Windows-only issues (Hebrew path crashes Vitest, 2 known test failures, CRLF line endings). Deferred to cloud/Linux.
 
 ## Notes
 
@@ -1284,10 +1326,15 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
     { "id": 52, "tasks": ["17.7"] },
     { "id": 53, "tasks": ["17.8"] },
     { "id": 54, "tasks": ["17.9"] },
-    { "id": 55, "tasks": ["16.2"] },
-    { "id": 56, "tasks": ["16.3"] },
-    { "id": 57, "tasks": ["16.4", "16.5"] },
-    { "id": 58, "tasks": ["16.6"] }
+    { "id": 55, "tasks": ["18.1"] },
+    { "id": 56, "tasks": ["18.2", "18.3"] },
+    { "id": 57, "tasks": ["18.4"] },
+    { "id": 58, "tasks": ["18.5"] },
+    { "id": 59, "tasks": ["18.6"] },
+    { "id": 60, "tasks": ["16.2"] },
+    { "id": 61, "tasks": ["16.3"] },
+    { "id": 62, "tasks": ["16.4", "16.5"] },
+    { "id": 63, "tasks": ["16.6"] }
   ]
 }
 ```

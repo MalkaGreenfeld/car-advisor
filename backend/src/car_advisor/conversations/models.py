@@ -89,3 +89,5 @@ class RepQuestionRow(Base):
     participation_effective_date: Mapped[date | None]
     answer_note: Mapped[str | None] = mapped_column(Unicode(500))
     answer_text: Mapped[str | None] = mapped_column(Unicode(2000))
+    # The table name or the group of a choice answer (migration 0002).
+    answer_choice: Mapped[str | None] = mapped_column(Unicode(200))

@@ -121,6 +121,12 @@
           @for (column of columns(); track column.id) {
             <td class="numeric">
               <app-amount [value]="column.view.participation" />
+              @if (column.alternative?.participation_source; as source) {
+                <span class="source">{{ copy.participationSource[source] }}</span>
+              }
+              @if (column.alternative?.participation_awaiting_rep) {
+                <span class="tag">{{ copy.awaitingRep }}</span>
+              }
               @if (column.alternative?.participation_effective_date; as effectiveDate) {
                 <span class="note">
                   <app-bidi-text [text]="effectiveFrom(effectiveDate)" />
@@ -216,6 +222,9 @@
       </tbody>
     </table>
   </div>
+  @if (hasCatalogParticipation()) {
+    <p class="catalog-note">{{ copy.catalogParticipationNote }}</p>
+  }
   @if (noAlternatives()) {
     <p class="empty">{{ copy.noAlternatives }}</p>
   }

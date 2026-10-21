@@ -16,7 +16,7 @@ export const employeeCopy = {
     },
     typing: 'היועץ מקליד',
     messageLabel: 'הודעה ליועץ',
-    placeholder: 'לדוגמה: אני בקבוצה ג ואני רוצה לבדוק רכב חשמלי',
+    placeholder: 'לדוגמה: אני מנהלת מוצר ואני רוצה לבדוק רכב חשמלי',
     hint: 'Enter לשליחה, Shift+Enter לשורה חדשה.',
     send: 'שליחה',
   },
@@ -24,7 +24,10 @@ export const employeeCopy = {
     heading: 'הנתונים שלי',
     // In the order of the challenge script, which is the order of the panel.
     fields: {
-      eligibility_group: { label: 'קבוצת זכאות' },
+      occupation: {
+        label: 'עיסוק',
+        hint: 'קובע את קבוצת הזכאות ואם אפשר לוותר על רכב. אפשר לבחור מהרשימה.',
+      },
       base_salary: { label: 'שכר בסיס חודשי (₪)', hint: 'ברוטו, לפני ניכויים.' },
       pay_components: { label: 'רכיבי שכר נוספים' },
       pension_rate_percent: { label: 'אחוז הפרשת העובד לפנסיה' },
@@ -33,22 +36,27 @@ export const employeeCopy = {
       has_current_car: { label: 'האם יש רכב חברה כיום?' },
       current_car: { label: 'הרכב הנוכחי' },
       current_car_participation: { label: 'השתתפות חודשית ברכב הנוכחי (₪)' },
-      occupation: { label: 'עיסוק', hint: 'קובע אם אפשר לוותר על רכב.' },
       children_under_23: {
         label: 'מספר ילדים עד גיל 23',
         hint: 'קובע זכאות למסלול ברוכת ילדים.',
       },
       display_name: { label: 'שם', hint: 'יוצג לנציג התחבורה בשאלות שנשלחות אליו.' },
     },
+    // The group is shown read-only: it follows from the occupation, or the representative set it.
+    group: {
+      label: 'קבוצת זכאות',
+      fromOccupation: 'לפי העיסוק',
+      fromRepresentative: 'נקבעה על ידי נציג התחבורה',
+      unknown: 'תיקבע לפי העיסוק',
+      hint: 'אי אפשר לשנות את הקבוצה כאן. אם היא שגויה, אפשר לבקש מהיועץ לפנות לנציג התחבורה.',
+    },
     choices: {
-      noGroup: 'לא נבחרה',
       noAnswer: 'לא נבחר',
       yes: 'כן',
       no: 'לא',
     },
     // The allowed values of each kind of field, worded like the server's own rejections.
     errors: {
-      group: 'יש לבחור קבוצה: א, ב, ג או ד.',
       yes_no: 'יש לבחור כן או לא.',
       amount: 'יש להזין סכום בשקלים, 0 ומעלה.',
       percent: 'יש להזין אחוז בין 0 ל\u05be100.',

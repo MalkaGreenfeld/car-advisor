@@ -12,7 +12,8 @@ export const comparisonCopy = {
     label: 'בחירת רכב עבור',
     separator: ' · ',
     notSaved: 'לא נשמר. הרכב הקודם נשאר בעמודה.',
-    needsGroup: 'יש למלא קבוצת זכאות בנתונים שלי לפני שבוחרים רכב אחר.',
+    // The group follows from the occupation (Req 11.18).
+    needsGroup: 'יש למלא את העיסוק בנתונים שלי לפני שבוחרים רכב אחר.',
     loading: 'טוען את רשימת הרכבים…',
     failed: 'לא ניתן לטעון את רשימת הרכבים.',
   },
@@ -63,5 +64,15 @@ export const comparisonCopy = {
     notSent: 'לא נשלחה שאלה לנציג',
   },
   unusedBudgetNote: 'למידע בלבד, לא משולם כשכר',
+  // Who gave the participation of a column (Req 6.25).
+  participationSource: {
+    employee: 'לפי העובד',
+    catalog: 'לפי הקטלוג',
+    representative: 'לפי נציג התחבורה',
+  },
+  awaitingRep: 'ממתין לאישור הנציג',
+  // Under the table, while a column shows the catalog's participation (Req 6.26).
+  catalogParticipationNote:
+    'ההשתתפות ברכב חדש מוצגת לפי הקטלוג. הסכום הסופי נקבע מול נציג התחבורה.',
   effectiveFrom: 'בתוקף מתאריך',
 } as const;

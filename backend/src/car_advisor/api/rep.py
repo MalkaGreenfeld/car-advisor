@@ -18,6 +18,7 @@ from car_advisor.conversations.profile import FieldError
 from car_advisor.conversations.rep_questions import (
     AlreadyAnswered,
     Answered,
+    ChoiceAnswer,
     InvalidAnswer,
     ParticipationAnswer,
     QuestionNotFound,
@@ -60,7 +61,9 @@ def _read(body: dict[str, Any]) -> SubmittedAnswer:
             effective_date=participation.effective_date,
             note=participation.note,
         )
-    # The model allows a participation or a text, and never both or neither.
+    if request.choice is not None:
+        return ChoiceAnswer(choice=request.choice.strip())
+    # The model allows exactly one of the three shapes.
     return TextAnswer(text=request.text or "")
 
 
@@ -71,7 +74,7 @@ def _invalid(response: Response, fields: tuple[FieldError, ...]) -> ErrorBody:
 
 @router.get("/rep/questions")
 def list_questions(services: ServicesDep) -> RepQuestionsResponse:
-    return RepQuestionsResponse(questions=tuple(list_for_rep(services.sessions)))
+    return RepQuestionsResponse(questions=tuple(list_for_rep(services.sessions, services.config)))
 
 
 @router.post(

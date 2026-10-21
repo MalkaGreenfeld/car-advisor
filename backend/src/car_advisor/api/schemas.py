@@ -26,7 +26,7 @@ from car_advisor.conversations.service import (
     OpenQuestion,
     StoredMessage,
 )
-from car_advisor.dataset.lookup import Candidates, CarCandidate
+from car_advisor.dataset.lookup import Candidates, CarCandidate, UsageValueMismatch
 from car_advisor.engine.config import CatalogCar
 from car_advisor.engine.types import Alternative, CarKey, EmployeeProfile, Group, Money, Powertrain
 
@@ -34,6 +34,7 @@ _MESSAGE_MAX_LENGTH: Final = 2000
 # The sizes of the columns that store an answer of Transport_Rep.
 _ANSWER_TEXT_MAX_LENGTH: Final = 2000
 _ANSWER_NOTE_MAX_LENGTH: Final = 500
+_ANSWER_CHOICE_MAX_LENGTH: Final = 200
 
 
 def _not_blank(text: str) -> str:
@@ -89,15 +90,18 @@ class ParticipationRequest(_Request):
 
 
 class RepAnswerRequest(_Request):
-    """The answer of Transport_Rep: a participation, or a text for any other kind of question."""
+    """The answer of Transport_Rep: a participation, a choice, or a text (Req 10.5, 10.6)."""
 
     participation: ParticipationRequest | None = None
+    # The table name of an occupation question, or the group of an eligibility group question.
+    choice: Annotated[_NonBlank, Field(max_length=_ANSWER_CHOICE_MAX_LENGTH)] | None = None
     text: Annotated[_NonBlank, Field(max_length=_ANSWER_TEXT_MAX_LENGTH)] | None = None
 
     @model_validator(mode="after")
     def _exactly_one_shape(self) -> Self:
-        if (self.participation is None) == (self.text is None):
-            raise ValueError("an answer holds either a participation or a text")
+        given = [part for part in (self.participation, self.choice, self.text) if part is not None]
+        if len(given) != 1:
+            raise ValueError("an answer holds exactly one of a participation, a choice or a text")
         return self
 
 
@@ -108,12 +112,20 @@ class AgentView(_Response):
     running: bool
 
 
+class EmployeeGroupView(_Response):
+    # Both null while the occupation is missing or unlisted and Transport_Rep set no group.
+    group: Group | None
+    source: Literal["occupation", "representative"] | None
+
+
 class ConversationStateResponse(_Response):
     """The conversation as the Employee_Screen renders it."""
 
     id: UUID
     messages: tuple[StoredMessage, ...]
     profile: EmployeeProfile
+    # The group in use and its source, which the panel shows read-only (Req 11.2).
+    employee_group: EmployeeGroupView
     alternatives: tuple[Alternative, ...]
     comparison: ComparisonView | None
     open_questions: tuple[OpenQuestion, ...]
@@ -126,6 +138,9 @@ class ConversationStateResponse(_Response):
             id=state.id,
             messages=state.messages,
             profile=state.profile,
+            employee_group=EmployeeGroupView(
+                group=state.employee_group.group, source=state.employee_group.source
+            ),
             alternatives=state.alternatives,
             comparison=state.comparison,
             open_questions=state.open_questions,
@@ -145,8 +160,14 @@ class CatalogCarView(_Response):
 
 class CatalogResponse(_Response):
     cars: tuple[CatalogCarView, ...]
-    # Names the profile field to fill in when the list is empty for lack of it (Req 4.17).
-    missing_field: Literal["eligibility_group"] | None = None
+    # Names the profile field to fill in when the list is empty for lack of it: the group follows
+    # from the occupation (Req 4.17).
+    missing_field: Literal["occupation"] | None = None
+
+
+class OccupationsResponse(_Response):
+    # The names of Occupations_Table, as the My Details panel suggests them (Req 11.19).
+    names: tuple[str, ...]
 
 
 class CarCandidateView(_Response):
@@ -196,12 +217,32 @@ class RepQuestionsResponse(_Response):
     questions: tuple[RepQuestionView, ...]
 
 
+class CatalogWarning(_Response):
+    """A catalog car whose usage value differs from the dataset's; the dataset's is used."""
+
+    display_name: str
+    car_key: CarKey
+    catalog_usage_value: int
+    dataset_usage_value: int
+
+    @classmethod
+    def from_mismatch(cls, mismatch: UsageValueMismatch) -> Self:
+        return cls(
+            display_name=mismatch.display_name,
+            car_key=mismatch.car_key,
+            catalog_usage_value=mismatch.catalog_usage_value,
+            dataset_usage_value=mismatch.dataset_usage_value,
+        )
+
+
 class Health(_Response):
     database_reachable: bool
     dataset_loaded: bool
     tax_year: int
     # 0 while the dataset cannot be read.
     record_count: Annotated[int, Field(ge=0)]
+    # Found at startup; they never change the status (Req 4.19).
+    catalog_warnings: tuple[CatalogWarning, ...] = ()
 
 
 class ErrorCode(StrEnum):

@@ -23,7 +23,10 @@ function createFakeApi() {
   const api = {
     createConversation: vi.fn<ApiClient['createConversation']>(),
     getConversation: vi.fn<ApiClient['getConversation']>(),
+    // The My Details panel reads the names of the occupations table.
+    getOccupations: vi.fn<ApiClient['getOccupations']>(),
   };
+  api.getOccupations.mockResolvedValue({ names: [] });
   api.createConversation.mockResolvedValue(conversationState('new-id'));
   api.getConversation.mockImplementation((id) => Promise.resolve(conversationState(id)));
   return api;

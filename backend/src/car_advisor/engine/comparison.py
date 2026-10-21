@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Literal
 
 from car_advisor.engine.config import CarCatalog, CatalogCar, OccupationsTable, RulesConfig
-from car_advisor.engine.eligibility import EligibilityResult, check_eligibility
+from car_advisor.engine.eligibility import EligibilityResult, check_eligibility, employee_group
 from car_advisor.engine.explanation import BreakdownItem, build_explanation
 from car_advisor.engine.money import Amount, amount, percent_of
 from car_advisor.engine.payroll import (
@@ -28,6 +28,8 @@ from car_advisor.engine.types import (
 )
 
 _ZERO = Decimal(0)
+
+ParticipationSource = Literal["employee", "catalog", "representative"]
 
 # The fields that belong to one car. Every other missing field is about the employee. Public,
 # because a question sent to Transport_Rep is matched to a missing item by the same rule.
@@ -118,6 +120,10 @@ class AlternativeResult:
     car_cost: Amount | None = None
     car_budget: Amount | None = None
     participation: Amount | None = None
+    # Who gave the participation of a car column (Req 6.25), and for a catalog amount whether
+    # a question to Transport_Rep about it is open. None for a waiver or an unknown participation.
+    participation_source: ParticipationSource | None = None
+    participation_awaiting_rep: bool = False
     participation_effective_date: date | None = None
     employer_gap_share: Amount | None = None
     employee_gap_share: Amount | None = None
@@ -162,6 +168,8 @@ class _Scenario:
     # The participation without the employee's share of the gap. For a Family_Track car the
     # items hold both, because the payroll deducts them together.
     own_participation: Decimal | None = None
+    participation_source: ParticipationSource | None = None
+    participation_awaiting_rep: bool = False
     participation_effective_date: date | None = None
 
 
@@ -169,6 +177,8 @@ class _Scenario:
 class _Participation:
     amount: Decimal | None
     missing: tuple[MissingField, ...] = ()
+    source: ParticipationSource | None = None
+    awaiting_rep: bool = False
     effective_date: date | None = None
 
 
@@ -287,6 +297,8 @@ def _alternative(
         car_cost=_shown(scenario.car_cost),
         car_budget=_shown(scenario.car_budget),
         participation=_shown(scenario.own_participation),
+        participation_source=scenario.participation_source,
+        participation_awaiting_rep=scenario.participation_awaiting_rep,
         participation_effective_date=scenario.participation_effective_date,
         employer_gap_share=_shown(scenario.employer_gap_share),
         employee_gap_share=_shown(scenario.employee_gap_share),
@@ -306,6 +318,10 @@ def _today_scenario(profile: EmployeeProfile, inputs: ComparisonInputs) -> _Scen
         # The employee has not said whether there is a car, so neither answer is assumed.
         return _Scenario(_CarItems(None, None, None, _ZERO), (MissingField.CURRENT_CAR,))
     if not profile.has_current_car:
+        entry = None if profile.occupation is None else inputs.occupations.find(profile.occupation)
+        if entry is not None and entry.car_mandatory:
+            # The occupation comes with a car, so a Today without one cannot exist (Req 8.17).
+            return _Scenario(_CarItems(None, None, None, _ZERO), (MissingField.CURRENT_CAR,))
         # An employee with no car has given it up, so Today pays the maintenance of the occupation.
         maintenance, gaps = _waiver_maintenance(profile, inputs.occupations)
         return _Scenario(_CarItems(_ZERO, _ZERO, _ZERO, maintenance), gaps)
@@ -367,10 +383,10 @@ def _car_scenario(
         missing.append(MissingField.CAR_GROUP)
         return _Scenario(_CarItems(usage_value, None, ev_refund, _ZERO), tuple(missing))
 
-    group = profile.eligibility_group
+    group = employee_group(profile, inputs.occupations)
     budget = None if group is None else rules.groups.budgets[group]
     cost = car.monthly_cost
-    participation = _regular_participation(profile, car_key, inputs)
+    participation = _new_or_current_participation(profile, car_key, car, inputs)
     if car.family_track:
         gap = _family_track_gap(budget, cost, rules)
         paid = _paid(participation.amount, gap.employee_share)
@@ -387,13 +403,16 @@ def _car_scenario(
         employer_gap_share=gap.employer_share,
         employee_gap_share=gap.employee_share,
         own_participation=participation.amount,
+        participation_source=participation.source,
+        participation_awaiting_rep=participation.awaiting_rep,
         participation_effective_date=participation.effective_date,
     )
 
 
 def _family_track_gap(budget: Decimal | None, cost: Decimal, rules: RulesConfig) -> _Gap:
     if budget is None:
-        return _Gap(missing=(MissingField.ELIGIBILITY_GROUP,))
+        # Without the occupation the group, and so the budget, is unknown (Req 6.10).
+        return _Gap(missing=(MissingField.OCCUPATION,))
     gap = max(_ZERO, cost - budget)
     employee_share = percent_of(gap, rules.family_track.employee_share_percent)
     # The employer pays what the employee does not, so the shares add up to the gap exactly.
@@ -407,20 +426,30 @@ def _paid(participation: Decimal | None, gap_share: Decimal | None) -> Decimal |
     return participation + gap_share
 
 
-def _regular_participation(
-    profile: EmployeeProfile, car_key: CarKey, inputs: ComparisonInputs
+def _new_or_current_participation(
+    profile: EmployeeProfile, car_key: CarKey, car: CatalogCar, inputs: ComparisonInputs
 ) -> _Participation:
-    # The employee's own figure is the only one used for the current car.
+    """The participation from its sources, in order (Req 6.3-6.5, 6.25).
+
+    The current car takes only the employee's figure. A new car takes the representative's
+    answer for the same car, else the catalog's Default_Participation, else it is missing.
+    """
     if profile.has_current_car is True and profile.current_car_key == car_key:
         provided = profile.current_car_participation
         if provided is None:
             return _Participation(None, (MissingField.CURRENT_CAR_PARTICIPATION,))
-        return _Participation(provided)
+        return _Participation(provided, source="employee")
 
     answer = inputs.rep_participations.get(car_key)
-    if answer is None:
-        return _Participation(None, (MissingField.NEW_CAR_PARTICIPATION,))
-    return _Participation(answer.amount, effective_date=answer.effective_date)
+    if answer is not None:
+        return _Participation(
+            answer.amount, source="representative", effective_date=answer.effective_date
+        )
+    if car.default_participation is not None:
+        # A question the employee asked keeps the catalog amount until it is answered (Req 6.23).
+        asked = (MissingField.NEW_CAR_PARTICIPATION, car_key) in inputs.rep_questions
+        return _Participation(car.default_participation, source="catalog", awaiting_rep=asked)
+    return _Participation(None, (MissingField.NEW_CAR_PARTICIPATION,))
 
 
 def _ev_refund(is_electric: bool, rules: RulesConfig) -> Decimal:

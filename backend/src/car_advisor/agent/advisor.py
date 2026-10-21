@@ -19,6 +19,7 @@ from car_advisor.agent.tools import AdvisorDeps, register_tools
 from car_advisor.conversations.profile import ALTERNATIVE_STEP, ScriptStep, script_step
 from car_advisor.conversations.service import ConversationState, OpenQuestion
 from car_advisor.engine import copy_he
+from car_advisor.engine.config import OccupationsTable
 from car_advisor.engine.types import CarAlternative, EmployeeProfile, MissingField
 
 # The headings of the state. The instructions name them, so both sides read the same constants.
@@ -38,7 +39,6 @@ _STEP_NAMES: Final[Mapping[int, str]] = {
 # The update_profile fields that answer each field the script asks about. The current car takes
 # three: whether there is one, how the employee described it, and the confirmed candidate.
 _SAVED_AS: Final[Mapping[MissingField, tuple[str, ...]]] = {
-    MissingField.ELIGIBILITY_GROUP: ("eligibility_group",),
     MissingField.BASE_SALARY: ("base_salary",),
     MissingField.PAY_COMPONENTS: ("pay_components",),
     MissingField.PENSION_RATE: ("pension_rate_percent",),
@@ -133,16 +133,18 @@ _SCRIPT: Final = _section(
     "If the message already answers some of the listed fields, save them first. The state is "
     "then read again, so you ask only for what is still missing. If the employee names an "
     "alternative early, remember it and use it when the script reaches the alternatives.",
-    f"basics: the eligibility group, which the employee says as a Hebrew letter ({_GROUPS}), and "
-    "the monthly base salary in shekels.",
+    "basics: the occupation (see Occupations in the table) and the monthly base salary in "
+    "shekels. The eligibility group follows from the occupation, so never ask for it.",
     "pay and deductions: additional pay components (commissions and bonuses, each with a "
     "monthly amount), the employee's own pension percentage, the employee's own study fund "
     "percentage and the tax credit points.",
     "current car: whether the employee has a company car today and, if so, which car (see "
     "Identifying a car) and the monthly participation that the employee pays for it. Zero is a "
     "valid participation. An employee with no company car has given it up and receives the car "
-    "maintenance of the occupation, so the occupation is asked instead (see Occupations in the "
-    "table).",
+    "maintenance of the occupation. In an occupation in which the car is mandatory there is no "
+    "situation without a car: when the state asks for the current car although the employee said "
+    "there is none, tell the employee that the occupation comes with a company car and ask which "
+    "car it is.",
     "alternatives: which alternative the employee wants to examine (see Alternatives).",
 )
 
@@ -156,6 +158,7 @@ _SAVING: Final = _section(
     "Save a value as the employee gave it: a monthly amount in shekels, a percentage as its "
     "number. If the employee gives a yearly figure or another unit, ask for the monthly amount "
     "instead of converting it.",
+    "Never save an eligibility group: it follows from the occupation (see The group).",
     "Read the result. A field in rejected was not saved: say so, ask for it again together with "
     "the allowed values that the result gives, and never describe it as saved. Repeat a saved "
     "value only if you must, exactly as the result returned it.",
@@ -227,28 +230,38 @@ _COMPARISON: Final = _section(
     "status not_eligible has no amounts: give the reason it returned.",
     "If a column has an unused_budget, say that it is for information only and is not paid as "
     "salary. If a participation came from the representative, mention its effective date.",
+    "A participation whose participation_source is catalog is the catalog's participation of "
+    "that car: present the column as calculated, and say once that the final amount is set with "
+    "the representative. If participation_awaiting_rep is true, say that the representative's "
+    "confirmation is awaited and that the column will be updated when it arrives.",
     "In Hebrew, name the amounts with these terms (the name in the result, then the term): "
     f"{_TERMS}.",
 )
 
 _REPRESENTATIVE: Final = _section(
     "The representative",
-    "ask_rep sends a question to the transport representative, and covers four fields. Call it "
+    "ask_rep sends a question to the transport representative, and covers five fields. Call it "
     "when the employee says they do not know what one of them asks for, or when it is one that "
-    "only the representative gives. For anything else the employee does not know (the group, the "
-    "salary, percentages, credit points), do not guess and do not send a question: explain that "
-    "the figure is needed and can be found on the payslip.",
+    "only the representative gives. For anything else the employee does not know (the salary, "
+    "percentages, credit points), do not guess and do not send a question: explain that the "
+    "figure is needed and can be found on the payslip.",
     "new_car_participation: the monthly participation in a new catalog car, with its car_key. "
-    "Only the representative gives it, so call ask_rep when the comparison shows it missing and "
-    "not sent, never ask the employee for it, and never use a figure the employee offers for it.",
-    "occupation: the employee says that none of the entries of the occupations table is theirs.",
+    "The comparison uses the catalog's participation, so do not ask the representative for it "
+    "unless the comparison shows it missing and not sent (a car without a catalog amount), or "
+    "the employee asks to have the amount confirmed by the representative. Never ask the "
+    "employee for it, and never use a figure the employee offers for it.",
+    "occupation: the employee says that none of the entries of the occupations table is theirs. "
+    "The representative then picks the entry.",
+    "eligibility_group: the employee says their group differs from the group in use and accepts "
+    "that you ask the representative (see The group).",
     "current_car: the employee cannot identify the current car.",
     "current_car_participation: the employee does not know the participation in the current car.",
     "Call ask_rep before compare_alternatives, so the table marks the field as sent. If you "
     "compared first, call compare_alternatives again after ask_rep and present only that last "
     "result. Tell the employee the employee_notice sentence exactly as ask_rep returned it, then "
     "present the interim comparison: today, and for the pending alternative what is missing and "
-    "that it will be updated when the answer arrives. If the question was not sent, its "
+    "that it will be updated when the answer arrives; for a confirmation of the catalog's "
+    "participation, the column stays calculated. If the question was not sent, its "
     "employee_notice says so: tell it just the same.",
     f'Never send a question for a field that is under "{_QUESTIONS}".',
 )
@@ -262,12 +275,26 @@ _NOTES: Final = _section(
     "it, name the field by its label, call compare_alternatives with the alternatives under "
     f'"{_ALTERNATIVES}", and present the updated comparison. The comparison already holds the '
     "answer. Do not repeat figures from the note, because a note is not a tool result.",
-    "For a free-text answer (an occupation, the current car, the participation in the current "
-    "car), say in words, without digits, what the representative answered, as the "
-    "representative's answer and never as your own decision. For the current car, search with the "
-    "answer and have the employee confirm a candidate. For the participation in the current car, "
-    "ask the employee to type the amount, then save it. For an occupation, only what the tools "
-    "return about giving up the car is a decision.",
+    "For a choice answer (the occupation or the eligibility group), say that the representative "
+    "answered, name the entry or the group as the note gives it, and that it is already stored. "
+    "Do not save it yourself. Call compare_alternatives with the alternatives under "
+    f'"{_ALTERNATIVES}" and present the updated comparison; only check_eligibility decides what '
+    "the occupation allows.",
+    "For a free-text answer (the current car, the participation in the current car), say in "
+    "words, without digits, what the representative answered, as the representative's answer and "
+    "never as your own decision. For the current car, search with the answer and have the "
+    "employee confirm a candidate. For the participation in the current car, ask the employee to "
+    "type the amount, then save it.",
+)
+
+_GROUP: Final = _section(
+    "The group",
+    f"The eligibility group (the Hebrew letters: {_GROUPS}) follows from the occupation, or the "
+    "representative set it. Never ask the employee for it and never save a group that the "
+    "employee states.",
+    "If the employee says their group differs from the group in use, say that the group follows "
+    "from the occupation, name the group in use only as a tool returned it, and offer to ask the "
+    "representative. If the employee accepts, call ask_rep with the field eligibility_group.",
 )
 
 _ERRORS: Final = _section(
@@ -302,6 +329,7 @@ INSTRUCTIONS: Final = "\n\n".join(
         _ALTERNATIVES_RULES,
         _COMPARISON,
         _REPRESENTATIVE,
+        _GROUP,
         _NOTES,
         _ERRORS,
         _SCOPE,
@@ -324,9 +352,10 @@ def occupations_instruction(ctx: RunContext[AdvisorDeps]) -> str:
         [
             _section(
                 "Occupations in the table",
-                "The occupation decides whether giving up the car is allowed and what the car "
-                "maintenance is, and the table below is the only list that the tools know. A name "
-                "with a slash stands for both genders.",
+                "The occupation decides the eligibility group, whether the car is mandatory, "
+                "whether giving up the car is allowed and what the car maintenance is, and the "
+                "table below is the only list that the tools know. A name with a slash stands for "
+                "both genders.",
                 "When the employee's words clearly name one entry, also in the other gender, save "
                 "the occupation with update_profile under the exact name of that entry. Do not "
                 "pick an entry because its job sounds similar.",
@@ -404,7 +433,7 @@ def _alternative_lines(state: ConversationState) -> list[str]:
     return lines
 
 
-def render_state(state: ConversationState) -> str:
+def render_state(state: ConversationState, occupations: OccupationsTable) -> str:
     """Render the part of the instructions that comes from the stored conversation.
 
     It lists the stored profile, the current step of the script with the fields still to ask,
@@ -413,7 +442,8 @@ def render_state(state: ConversationState) -> str:
     the terms of the screen. A stored field shows only under its update_profile name, so a label
     in the state always stands for something that is not stored.
     """
-    step = script_step(state.profile, [question.field for question in state.open_questions])
+    open_fields = [question.field for question in state.open_questions]
+    step = script_step(state.profile, open_fields, occupations)
     questions_title = (
         f"{_QUESTIONS} (do not ask the employee for these, and do not send them again)"
     )
@@ -439,7 +469,7 @@ def state_instruction(ctx: RunContext[AdvisorDeps]) -> str:
     call already sees what the tool stored.
     """
     deps = ctx.deps
-    return render_state(deps.conversations.state(deps.conversation_id))
+    return render_state(deps.conversations.state(deps.conversation_id), deps.config.occupations)
 
 
 def build_advisor(model: Model, *, offer_document_upload: bool = False) -> Agent[AdvisorDeps, str]:

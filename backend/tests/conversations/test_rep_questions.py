@@ -37,7 +37,13 @@ from car_advisor.engine.types import (
     MissingField,
     WaiverAlternative,
 )
-from car_advisor.rules.loader import AppConfig
+from car_advisor.rules.loader import AppConfig, load_config
+from tests.conversations.conftest import CONFIG_DIR
+
+# The shipped files, which the views read the catalog amount and the choices from.
+SHIPPED = load_config(
+    CONFIG_DIR / "rules.yaml", CONFIG_DIR / "car_catalog.yaml", CONFIG_DIR / "occupations.yaml"
+)
 
 EMPLOYEE_NUMBER = 4821
 NOW = datetime(2026, 3, 1, 9, 30)
@@ -59,7 +65,6 @@ UNLISTED_OCCUPATION = "רופא שיניים"
 # the car keys, so that none of them can appear in a text by chance.
 PROFILE: dict[str, object] = {
     "display_name": DISPLAY_NAME,
-    "eligibility_group": "C",
     "base_salary": "17391",
     "pay_components": [
         {"kind": "commission", "label": "עמלות רבעון", "amount": "2953.5"},
@@ -78,7 +83,8 @@ PROFILE: dict[str, object] = {
 
 QUESTION_TYPES = {
     RepField.NEW_CAR_PARTICIPATION: RepQuestionType.PARTICIPATION,
-    RepField.OCCUPATION: RepQuestionType.OCCUPATION_WAIVER,
+    RepField.OCCUPATION: RepQuestionType.OCCUPATION,
+    RepField.ELIGIBILITY_GROUP: RepQuestionType.ELIGIBILITY_GROUP,
     RepField.CURRENT_CAR: RepQuestionType.OTHER,
     RepField.CURRENT_CAR_PARTICIPATION: RepQuestionType.OTHER,
 }
@@ -96,7 +102,15 @@ def employee_number(monkeypatch: pytest.MonkeyPatch) -> int:
 def conversation_id(dataset_service: ConversationService) -> UUID:
     conversation_id = dataset_service.create()
     dataset_service.update_profile(conversation_id, PROFILE)
+    # The occupation is unlisted, so the group is the representative's Group_Override.
+    set_group(dataset_service, conversation_id, "C")
     return conversation_id
+
+
+def set_group(service: ConversationService, conversation_id: UUID, group: str) -> None:
+    with service.transaction() as session:
+        service.apply_rep_answer(session, conversation_id, {"eligibility_group": group})
+        service.recalculate(session, conversation_id)
 
 
 @pytest.fixture
@@ -257,7 +271,7 @@ def test_the_question_text_holds_no_profile_amount(
 
     ask(dataset_service, sessions, conversation_id, field, atto_3)
 
-    [view] = list_for_rep(sessions)
+    [view] = list_for_rep(sessions, SHIPPED)
     assert [value for value in private if value in view.question_text] == []
 
 
@@ -271,6 +285,11 @@ def test_the_question_text_holds_no_profile_amount(
         ),
         pytest.param(
             RepField.OCCUPATION, [DISPLAY_NAME, GROUP_C, UNLISTED_OCCUPATION], id="occupation"
+        ),
+        pytest.param(
+            RepField.ELIGIBILITY_GROUP,
+            [DISPLAY_NAME, GROUP_C, UNLISTED_OCCUPATION],
+            id="eligibility_group",
         ),
         pytest.param(RepField.CURRENT_CAR, [DISPLAY_NAME, GROUP_C], id="current_car"),
         pytest.param(
@@ -290,7 +309,7 @@ def test_the_question_text_names_the_employee_the_group_and_what_it_asks_about(
 ) -> None:
     ask(dataset_service, sessions, conversation_id, field, atto_3)
 
-    [view] = list_for_rep(sessions)
+    [view] = list_for_rep(sessions, SHIPPED)
     assert [part for part in parts if part not in view.question_text] == []
 
 
@@ -333,7 +352,7 @@ def test_the_list_holds_the_open_questions_first_then_the_answered_ones_each_old
                 )
             )
 
-    listed = [view.id for view in list_for_rep(sessions)]
+    listed = [view.id for view in list_for_rep(sessions, SHIPPED)]
 
     assert listed == [asked[name] for name in "caedb"]
 
@@ -343,12 +362,11 @@ def test_the_employee_label_and_group_are_snapshots_taken_at_creation(
 ) -> None:
     first_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
     renamed = "רונית כהן"
-    dataset_service.update_profile(
-        conversation_id, {"display_name": renamed, "eligibility_group": "A"}
-    )
+    dataset_service.update_profile(conversation_id, {"display_name": renamed})
+    set_group(dataset_service, conversation_id, "A")
     second_id, _ = ask(dataset_service, sessions, conversation_id, RepField.CURRENT_CAR)
 
-    views = {view.id: view for view in list_for_rep(sessions)}
+    views = {view.id: view for view in list_for_rep(sessions, SHIPPED)}
 
     first, second = views[first_id], views[second_id]
     assert (first.employee.display_name, first.eligibility_group) == (DISPLAY_NAME, Group.C)
@@ -374,7 +392,7 @@ def test_without_a_display_name_the_label_is_built_from_the_employee_number(
         dataset_service.update_profile(conversation, {"occupation": UNLISTED_OCCUPATION})
         asked[conversation] = ask(dataset_service, sessions, conversation, RepField.OCCUPATION)[0]
 
-    views = {view.id: view for view in list_for_rep(sessions)}
+    views = {view.id: view for view in list_for_rep(sessions, SHIPPED)}
 
     for conversation, number in conversations.items():
         view = views[asked[conversation]]
@@ -386,7 +404,7 @@ def test_without_a_display_name_the_label_is_built_from_the_employee_number(
         assert view.eligibility_group is None
 
 
-def test_creating_a_question_marks_only_the_car_it_is_about_as_sent(
+def test_creating_a_question_marks_only_the_car_it_is_about_as_awaiting_the_rep(
     conversation_id: UUID,
     dataset_service: ConversationService,
     sessions: sessionmaker[Session],
@@ -394,20 +412,20 @@ def test_creating_a_question_marks_only_the_car_it_is_about_as_sent(
 ) -> None:
     dataset_service.set_alternatives(conversation_id, [ATTO_3, NIRO])
     version = stored_version(sessions, conversation_id)
-    field = MissingField.NEW_CAR_PARTICIPATION
-    before = comparison_of(dataset_service, conversation_id)
-    assert [sent_flags(column.missing) for column in before.alternatives] == [
-        {field: False},
-        {field: False},
-    ]
+
+    def marks() -> list[tuple[str, object, bool]]:
+        columns = comparison_of(dataset_service, conversation_id).alternatives
+        return [
+            (column.status, column.participation_source, column.participation_awaiting_rep)
+            for column in columns
+        ]
+
+    assert marks() == [("calculated", "catalog", False), ("calculated", "catalog", False)]
 
     ask(dataset_service, sessions, conversation_id, RepField.NEW_CAR_PARTICIPATION, atto_3)
 
-    after = comparison_of(dataset_service, conversation_id)
-    assert [sent_flags(column.missing) for column in after.alternatives] == [
-        {field: True},
-        {field: False},
-    ]
+    # The catalog amount stays in use until the representative answers (Req 6.23).
+    assert marks() == [("calculated", "catalog", True), ("calculated", "catalog", False)]
     assert stored_version(sessions, conversation_id) == version + 1
 
 
@@ -572,7 +590,7 @@ def test_a_view_holds_the_fields_of_the_design_and_never_the_conversation_id(
         dataset_service, sessions, conversation_id, RepField.NEW_CAR_PARTICIPATION, atto_3
     )
 
-    [view] = list_for_rep(sessions)
+    [view] = list_for_rep(sessions, SHIPPED)
 
     assert set(RepQuestionView.model_fields) == {
         "id",
@@ -582,10 +600,13 @@ def test_a_view_holds_the_fields_of_the_design_and_never_the_conversation_id(
         "employee",
         "eligibility_group",
         "car",
+        "suggested_amount",
+        "choices",
         "status",
         "answer",
     }
     assert view.id == question_id
+    assert (view.suggested_amount, view.choices) == (atto_3.default_participation, None)
     assert view.question_type is RepQuestionType.PARTICIPATION
     assert (view.status, view.answer) == (RepQuestionStatus.OPEN, None)
     assert (view.employee.display_name, view.employee.number) == (DISPLAY_NAME, EMPLOYEE_NUMBER)
@@ -607,7 +628,8 @@ def test_an_answered_question_comes_back_with_its_stored_answer(
     participation_id, _ = ask(
         dataset_service, sessions, conversation_id, RepField.NEW_CAR_PARTICIPATION, atto_3
     )
-    text_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
+    text_id, _ = ask(dataset_service, sessions, conversation_id, RepField.CURRENT_CAR)
+    choice_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
     answered = {"status": RepQuestionStatus.ANSWERED.value, "answered_at": NOW}
     with sessions.begin() as session:
         session.execute(
@@ -623,10 +645,15 @@ def test_an_answered_question_comes_back_with_its_stored_answer(
         session.execute(
             update(RepQuestionRow)
             .where(RepQuestionRow.id == text_id)
-            .values(**answered, answer_text="אפשר לוותר")
+            .values(**answered, answer_text="קיה פיקנטו 2023")
+        )
+        session.execute(
+            update(RepQuestionRow)
+            .where(RepQuestionRow.id == choice_id)
+            .values(**answered, answer_choice="מנהל/ת מוצר")
         )
 
-    views = {view.id: view for view in list_for_rep(sessions)}
+    views = {view.id: view for view in list_for_rep(sessions, SHIPPED)}
 
     assert views[participation_id].status is RepQuestionStatus.ANSWERED
     assert views[participation_id].answer == StoredAnswer(
@@ -636,5 +663,33 @@ def test_an_answered_question_comes_back_with_its_stored_answer(
         text=None,
     )
     assert views[text_id].answer == StoredAnswer(
-        amount=None, effective_date=None, note=None, text="אפשר לוותר"
+        amount=None, effective_date=None, note=None, text="קיה פיקנטו 2023"
     )
+    assert views[choice_id].answer == StoredAnswer(
+        amount=None, effective_date=None, note=None, text=None, choice="מנהל/ת מוצר"
+    )
+
+
+def test_a_choice_question_lists_its_choices_and_no_catalog_amount(
+    conversation_id: UUID, dataset_service: ConversationService, sessions: sessionmaker[Session]
+) -> None:
+    occupation_id, _ = ask(dataset_service, sessions, conversation_id, RepField.OCCUPATION)
+    group_id, _ = ask(dataset_service, sessions, conversation_id, RepField.ELIGIBILITY_GROUP)
+    other_id, _ = ask(dataset_service, sessions, conversation_id, RepField.CURRENT_CAR)
+
+    views = {view.id: view for view in list_for_rep(sessions, SHIPPED)}
+
+    occupation, group, other = views[occupation_id], views[group_id], views[other_id]
+    assert occupation.choices is not None
+    assert [choice.value for choice in occupation.choices] == [
+        item.name for item in SHIPPED.occupations.occupations
+    ]
+    assert group.choices is not None
+    assert [(choice.value, choice.label) for choice in group.choices] == [
+        ("A", "א"),
+        ("B", "ב"),
+        ("C", "ג"),
+        ("D", "ד"),
+    ]
+    assert other.choices is None
+    assert {view.suggested_amount for view in (occupation, group, other)} == {None}

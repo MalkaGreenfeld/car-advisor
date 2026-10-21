@@ -38,6 +38,7 @@ from car_advisor.engine.types import (
     WaiverAlternative,
 )
 from car_advisor.rules.loader import AppConfig
+from tests.conversations.conftest import without_default_participation
 
 D = Decimal
 NOW = datetime(2026, 3, 1, 9, 30)
@@ -58,9 +59,10 @@ CARNIVAL_KEY = CarKey.parse("2026-2025-1-00885-00648")  # a family-track car, co
 CARNIVAL = CarAlternative(car_key=CARNIVAL_KEY)
 WAIVER = WaiverAlternative()
 
-# A group C employee who drives the Tesla and pays 350 for it.
+# A product manager, so group C, who drives the Tesla and pays 350 for it.
+PRODUCT_MANAGER = "מנהל/ת מוצר"
 EMPLOYEE: dict[str, object] = {
-    "eligibility_group": "C",
+    "occupation": PRODUCT_MANAGER,
     "base_salary": "16000",
     "pay_components": [{"kind": "bonus", "label": "Annual", "amount": "500"}],
     "pension_rate_percent": "6",
@@ -95,6 +97,8 @@ COLUMN_KEYS = {
     "car_budget",
     "participation",
     "participation_effective_date",
+    "participation_source",
+    "participation_awaiting_rep",
     "employer_gap_share",
     "employee_gap_share",
     "usage_value",
@@ -201,12 +205,12 @@ def test_update_profile_stores_nothing_when_one_field_is_invalid(
     with pytest.raises(ProfileValidationError) as caught:
         dataset_service.update_profile(
             conversation_id,
-            {"base_salary": "20000", "eligibility_group": "E", "pension_rate_percent": "101"},
+            {"base_salary": "20000", "eligibility_group": "B", "pension_rate_percent": "101"},
         )
 
     ranges = copy_he.PROFILE_FIELD_RANGES
     assert caught.value.errors == (
-        FieldError("eligibility_group", ranges["eligibility_group"]),
+        FieldError("eligibility_group", copy_he.GROUP_FROM_OCCUPATION),
         FieldError("pension_rate_percent", ranges["pension_rate_percent"]),
     )
     assert dataset_service.state(conversation_id) == before
@@ -242,7 +246,7 @@ def test_update_profile_partial_stores_the_valid_fields_and_returns_the_rejected
             "credit_points": "3",
             "pension_rate_percent": "101",
             "base_salary": "20000",
-            "eligibility_group": "E",
+            "eligibility_group": "B",
         },
     )
 
@@ -250,7 +254,7 @@ def test_update_profile_partial_stores_the_valid_fields_and_returns_the_rejected
     stored = before.profile.model_copy(update={"base_salary": D(20000), "credit_points": D(3)})
     assert update.saved == ("base_salary", "credit_points")
     assert update.rejected == (
-        FieldError("eligibility_group", ranges["eligibility_group"]),
+        FieldError("eligibility_group", copy_he.GROUP_FROM_OCCUPATION),
         FieldError("pension_rate_percent", ranges["pension_rate_percent"]),
     )
     assert update.profile == stored
@@ -340,7 +344,7 @@ def test_after_each_mutation_the_stored_comparison_is_what_the_engine_returns_fo
         (
             "agent edit",
             lambda: service.update_profile_partial(
-                conversation_id, {"eligibility_group": "B", "base_salary": "-1"}
+                conversation_id, {"occupation": "מפתח/ת תוכנה", "base_salary": "-1"}
             ),
         ),
         ("car picker", lambda: service.replace_alternative(conversation_id, 1, PICANTO)),
@@ -472,10 +476,10 @@ def test_a_concurrent_version_bump_is_retried_once_on_the_fresh_data(
 
     lookup.interfere = other_request
 
-    profile = service.update_profile(conversation_id, {"eligibility_group": "B"})
+    profile = service.update_profile(conversation_id, {"credit_points": "2"})
 
     assert lookup.attempts == 2
-    assert (profile.base_salary, profile.eligibility_group) == (D(17000), "B")
+    assert (profile.base_salary, profile.credit_points) == (D(17000), D(2))
     state = service.state(conversation_id)
     assert state.profile == profile
     assert state.comparison == engine_view(state)
@@ -534,7 +538,7 @@ def test_a_change_that_goes_stale_twice_raises_a_conflict_and_stores_nothing(
     lookup.interfere = other_request
 
     with pytest.raises(ConversationConflict) as caught:
-        service.update_profile(conversation_id, {"eligibility_group": "B"})
+        service.update_profile(conversation_id, {"credit_points": "2"})
 
     assert lookup.attempts == 2
     assert "17000" not in str(caught.value)
@@ -545,14 +549,16 @@ def test_a_change_that_goes_stale_twice_raises_a_conflict_and_stores_nothing(
 
 @pytest.fixture
 def showcase(
-    dataset_service: ConversationService, sessions: sessionmaker[Session], app_config: AppConfig
+    sessions: sessionmaker[Session], real_sessions: sessionmaker[Session], app_config: AppConfig
 ) -> dict[str, Any]:
-    """The stored comparison as JSON: one column of each status, and one for giving up the car."""
+    """The stored comparison as JSON: one column of each status, and one for giving up the car.
+
+    The Niro has no catalog participation here, so its column waits for the representative.
+    """
+    config = without_default_participation(app_config, NIRO_KEY)
+    dataset_service = ConversationService(sessions, CarLookup(real_sessions, 2026), config)
     conversation_id = dataset_service.create()
-    occupation = next(
-        item.name for item in app_config.occupations.occupations if item.car_waiver_allowed
-    )
-    dataset_service.update_profile(conversation_id, {**EMPLOYEE, "occupation": occupation})
+    dataset_service.update_profile(conversation_id, EMPLOYEE)
     add_question(
         sessions,
         conversation_id,
@@ -605,6 +611,10 @@ def test_a_calculated_column_carries_whole_shekels_and_text(
     assert column["eligibility"]["reason"]
     assert amounts(column, "car_cost", "car_budget", "unused_budget") == [4100, 4500, 400]
     assert amounts(column, "participation", "participation_effective_date") == [400, "2026-01-01"]
+    assert amounts(column, "participation_source", "participation_awaiting_rep") == [
+        "representative",
+        False,
+    ]
     assert column["employer_gap_share"] is None
     assert amounts(column, "usage_value", "ev_refund", "car_maintenance") == [
         record.usage_value,
@@ -653,18 +663,18 @@ def test_a_not_eligible_column_carries_only_the_car_the_status_and_the_reason(
     assert column["eligibility"]["reason"]
     assert column["missing"] == []
     carried = {"position", "status", "car", "eligibility", "missing"}
-    assert [name for name in COLUMN_KEYS - carried if column[name] is not None] == []
+    assert column["participation_awaiting_rep"] is False
+    shown = COLUMN_KEYS - carried - {"participation_awaiting_rep"}
+    assert [name for name in shown if column[name] is not None] == []
 
 
 def test_giving_up_the_car_is_a_column_without_a_car_that_pays_the_maintenance(
     showcase: dict[str, Any], app_config: AppConfig
 ) -> None:
     column = showcase["alternatives"][3]
-    maintenance = next(
-        item.car_maintenance
-        for item in app_config.occupations.occupations
-        if item.car_waiver_allowed
-    )
+    entry = app_config.occupations.find(PRODUCT_MANAGER)
+    assert entry is not None
+    maintenance = entry.car_maintenance
 
     assert column["car"] is None
     assert amounts(column, "usage_value", "participation", "ev_refund") == [0, 0, 0]
@@ -731,9 +741,34 @@ def test_a_car_that_is_in_neither_the_catalog_nor_the_dataset_is_a_pending_colum
     ]
 
 
-def test_a_question_about_a_car_marks_only_the_column_of_that_car_as_sent(
-    dataset_service: ConversationService, sessions: sessionmaker[Session]
+def test_a_confirmation_question_marks_only_its_car_as_awaiting_and_keeps_the_catalog_amount(
+    dataset_service: ConversationService, sessions: sessionmaker[Session], app_config: AppConfig
 ) -> None:
+    conversation_id = dataset_service.create()
+    dataset_service.update_profile(conversation_id, EMPLOYEE)
+    add_question(sessions, conversation_id, MissingField.NEW_CAR_PARTICIPATION, PICANTO_KEY)
+
+    picanto, niro = dataset_service.set_alternatives(conversation_id, [PICANTO, NIRO]).alternatives
+
+    catalog = app_config.catalog
+    for column, key, awaiting in ((picanto, PICANTO_KEY, True), (niro, NIRO_KEY, False)):
+        car = catalog.find(key)
+        assert car is not None
+        assert column.status == "calculated"
+        assert column.participation == car.default_participation
+        assert (column.participation_source, column.participation_awaiting_rep) == (
+            "catalog",
+            awaiting,
+        )
+        assert column.missing == ()
+
+
+def test_a_question_about_a_car_marks_only_the_column_of_that_car_as_sent(
+    sessions: sessionmaker[Session], real_sessions: sessionmaker[Session], app_config: AppConfig
+) -> None:
+    # Without catalog participations both cars wait for the representative.
+    config = without_default_participation(app_config, PICANTO_KEY, NIRO_KEY)
+    dataset_service = ConversationService(sessions, CarLookup(real_sessions, 2026), config)
     conversation_id = dataset_service.create()
     dataset_service.update_profile(conversation_id, EMPLOYEE)
     add_question(sessions, conversation_id, MissingField.NEW_CAR_PARTICIPATION, PICANTO_KEY)
@@ -795,7 +830,7 @@ def test_the_latest_answer_for_a_car_is_the_one_applied(
 
 
 def test_an_answer_applies_only_in_its_own_conversation_and_only_as_a_participation(
-    dataset_service: ConversationService, sessions: sessionmaker[Session]
+    dataset_service: ConversationService, sessions: sessionmaker[Session], app_config: AppConfig
 ) -> None:
     other = dataset_service.create()
     conversation_id = dataset_service.create()
@@ -812,11 +847,16 @@ def test_an_answer_applies_only_in_its_own_conversation_and_only_as_a_participat
 
     [column] = dataset_service.set_alternatives(conversation_id, [ATTO_3]).alternatives
 
-    assert column.status == "pending"
-    assert column.participation is None
-    assert [(item.field, item.sent_to_rep) for item in column.missing] == [
-        (MissingField.NEW_CAR_PARTICIPATION, False)
-    ]
+    # Neither answer is this car's in this conversation, so the catalog's amount stays.
+    car = app_config.catalog.find(ATTO_3_KEY)
+    assert car is not None
+    assert column.status == "calculated"
+    assert (column.participation, column.participation_source) == (
+        car.default_participation,
+        "catalog",
+    )
+    assert column.participation_effective_date is None
+    assert column.missing == ()
 
 
 def test_a_family_track_column_carries_the_participation_and_both_shares_of_the_gap(
@@ -843,3 +883,48 @@ def test_a_family_track_column_carries_the_participation_and_both_shares_of_the_
         750,
         750,
     )
+
+
+@pytest.mark.parametrize("partial", [False, True], ids=["panel", "agent"])
+def test_the_employee_can_never_set_the_group(
+    partial: bool, dataset_service: ConversationService, sessions: sessionmaker[Session]
+) -> None:
+    conversation_id = dataset_service.create()
+    dataset_service.update_profile(conversation_id, EMPLOYEE)
+    before = dataset_service.state(conversation_id)
+    group_error = FieldError("eligibility_group", copy_he.GROUP_FROM_OCCUPATION)
+
+    if partial:
+        update = dataset_service.update_profile_partial(conversation_id, {"eligibility_group": "D"})
+        assert (update.saved, update.rejected) == ((), (group_error,))
+    else:
+        with pytest.raises(ProfileValidationError) as caught:
+            dataset_service.update_profile(conversation_id, {"eligibility_group": "D"})
+        assert caught.value.errors == (group_error,)
+
+    after = dataset_service.state(conversation_id)
+    assert after.profile == before.profile
+    assert after.employee_group == before.employee_group
+    assert (after.employee_group.group, after.employee_group.source) == ("C", "occupation")
+
+
+def test_a_rep_answer_writes_the_group_and_the_comparison_follows_it(
+    dataset_service: ConversationService, engine_view: EngineView
+) -> None:
+    conversation_id = dataset_service.create()
+    dataset_service.update_profile(conversation_id, EMPLOYEE)
+    dataset_service.set_alternatives(conversation_id, [SEAL])
+    assert comparison_of(dataset_service.state(conversation_id)).alternatives[0].status == (
+        "not_eligible"
+    )
+
+    with dataset_service.transaction() as session:
+        dataset_service.apply_rep_answer(session, conversation_id, {"eligibility_group": "D"})
+        dataset_service.recalculate(session, conversation_id)
+
+    state = dataset_service.state(conversation_id)
+    assert (state.employee_group.group, state.employee_group.source) == ("D", "representative")
+    [column] = comparison_of(state).alternatives
+    assert column.eligibility.status == "eligible"
+    assert column.car_budget == 5200
+    assert state.comparison == engine_view(state)

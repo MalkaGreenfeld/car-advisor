@@ -47,7 +47,23 @@ REPLY = "שמרתי את הפרטים"
 SALARY = "7654321"
 
 # The keys that the client in frontend/src/app/shared/api-models.ts reads.
-STATE_KEYS = {"id", "messages", "profile", "alternatives", "comparison", "open_questions", "agent"}
+STATE_KEYS = {
+    "id",
+    "messages",
+    "profile",
+    "employee_group",
+    "alternatives",
+    "comparison",
+    "open_questions",
+    "agent",
+}
+# An occupation of the shipped table for each group, which gives the employee that group.
+OCCUPATION_OF_GROUP = {
+    "A": "רכז/ת רכש",
+    "B": "מפתח/ת תוכנה",
+    "C": "מנהל/ת מוצר",
+    "D": "מנהל/ת חטיבה",
+}
 PROFILE_KEYS = {
     "display_name",
     "eligibility_group",
@@ -83,6 +99,8 @@ ALTERNATIVE_KEYS = {
     "car_budget",
     "participation",
     "participation_effective_date",
+    "participation_source",
+    "participation_awaiting_rep",
     "employer_gap_share",
     "employee_gap_share",
     "usage_value",
@@ -290,16 +308,21 @@ def test_a_message_of_2000_characters_is_accepted(client: TestClient, conversati
 def test_a_valid_profile_change_is_stored_recalculated_and_shown_after_a_refresh(
     client: TestClient, conversation: str
 ) -> None:
-    changes = {"eligibility_group": "C", "base_salary": "16000.50", "children_under_23": 2}
+    changes = {
+        "occupation": OCCUPATION_OF_GROUP["C"],
+        "base_salary": "16000.50",
+        "children_under_23": 2,
+    }
 
     response = client.patch(url(conversation, "/profile"), json={"changes": changes})
 
     assert response.status_code == 200
     body = response.json()
-    assert (body["profile"]["eligibility_group"], body["profile"]["base_salary"]) == (
-        "C",
+    assert (body["profile"]["occupation"], body["profile"]["base_salary"]) == (
+        OCCUPATION_OF_GROUP["C"],
         "16000.50",
     )
+    assert body["employee_group"] == {"group": "C", "source": "occupation"}
     assert body["profile"]["children_under_23"] == 2
     assert body["comparison"] is not None
     assert client.get(url(conversation)).json() == body
@@ -338,7 +361,8 @@ def test_an_invalid_profile_change_gives_422_with_a_message_per_field_and_stores
     body = response.json()
     assert body["code"] == "invalid_fields"
     assert {error["field"]: error["message"] for error in body["fields"]} == {
-        "eligibility_group": copy_he.PROFILE_FIELD_RANGES["eligibility_group"],
+        # Refused whatever its value: only the representative sets the group (Req 11.2).
+        "eligibility_group": copy_he.GROUP_FROM_OCCUPATION,
         "base_salary": copy_he.PROFILE_FIELD_RANGES["base_salary"],
         "pension_rate_percent": copy_he.PROFILE_FIELD_RANGES["pension_rate_percent"],
         "credit_points": copy_he.PROFILE_FIELD_RANGES["credit_points"],
@@ -435,33 +459,48 @@ TESLA_IN_CATALOG = {"car_key": TESLA, "display_name": "Tesla Model 3", "group": 
 def test_the_catalog_has_the_cars_of_the_group_and_of_the_groups_below_it(
     client: TestClient, conversation: str, group: str, cars: list[dict[str, str]]
 ) -> None:
-    client.patch(url(conversation, "/profile"), json={"changes": {"eligibility_group": group}})
+    occupation = OCCUPATION_OF_GROUP[group]
+    client.patch(url(conversation, "/profile"), json={"changes": {"occupation": occupation}})
 
     response = client.get(url(conversation, "/catalog"))
 
     assert (response.status_code, response.json()) == (200, {"cars": cars, "missing_field": None})
 
 
-def test_the_catalog_without_a_stored_group_is_empty_and_names_the_missing_field(
-    client: TestClient, conversation: str
+@pytest.mark.parametrize("occupation", [None, "Gardener"], ids=["no-occupation", "unlisted"])
+def test_the_catalog_without_a_known_group_is_empty_and_names_the_occupation(
+    client: TestClient, conversation: str, occupation: str | None
 ) -> None:
+    client.patch(url(conversation, "/profile"), json={"changes": {"occupation": occupation}})
+
     response = client.get(url(conversation, "/catalog"))
 
     assert (response.status_code, response.json()) == (
         200,
-        {"cars": [], "missing_field": "eligibility_group"},
+        {"cars": [], "missing_field": "occupation"},
     )
 
 
-def test_the_catalog_is_empty_again_once_the_group_is_cleared(
+def test_the_catalog_is_empty_again_once_the_occupation_is_cleared(
     client: TestClient, conversation: str
 ) -> None:
-    client.patch(url(conversation, "/profile"), json={"changes": {"eligibility_group": "D"}})
-    client.patch(url(conversation, "/profile"), json={"changes": {"eligibility_group": None}})
+    changes = {"occupation": OCCUPATION_OF_GROUP["D"]}
+    client.patch(url(conversation, "/profile"), json={"changes": changes})
+    client.patch(url(conversation, "/profile"), json={"changes": {"occupation": None}})
 
     body = client.get(url(conversation, "/catalog")).json()
 
-    assert body == {"cars": [], "missing_field": "eligibility_group"}
+    assert body == {"cars": [], "missing_field": "occupation"}
+
+
+def test_the_occupations_route_lists_the_table_names_in_order(
+    client: TestClient, services: Services
+) -> None:
+    response = client.get("/api/occupations")
+
+    names = [item.name for item in services.config.occupations.occupations]
+    assert (response.status_code, response.json()) == (200, {"names": names})
+    assert len(names) == 14
 
 
 def test_a_search_gives_every_matching_car_and_asks_for_a_selection(client: TestClient) -> None:
@@ -592,7 +631,7 @@ def test_the_state_has_exactly_the_keys_the_client_reads(
     )
 
     state = client.patch(
-        url(conversation, "/profile"), json={"changes": {"eligibility_group": "C"}}
+        url(conversation, "/profile"), json={"changes": {"occupation": OCCUPATION_OF_GROUP["C"]}}
     ).json()
 
     assert set(state) == STATE_KEYS

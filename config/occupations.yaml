@@ -1,63 +1,91 @@
-# The sheet also gives each occupation an entitlement group. The employee tells the group, as in the
-# challenge script, so it is not stored here.
 # The names are Hebrew because employees type their occupation in Hebrew. A name with a slash stands for
 # both genders: "מפתח/ת תוכנה" matches "מפתח תוכנה" and "מפתחת תוכנה". Matching trims whitespace at the
 # ends only.
+# group is the employee's eligibility group: the advisor takes it from the occupation and never asks for it.
+# car_mandatory is the sheet's own column. Such an occupation has no waiver and no Today without a car.
 mock_data: "MOCK DATA - the challenge's occupations of 2026-10-12. To use Strauss's table, replace this file with it in the same format."
 
 occupations:
   - name: "נציג/ת מכירות שטח"
+    group: B
+    car_mandatory: true
     car_waiver_allowed: false
     car_maintenance: 0
 
   - name: "מנהל/ת אזור מכירות"
+    group: C
+    car_mandatory: true
     car_waiver_allowed: false
     car_maintenance: 0
 
   - name: "טכנאי/ת שירות"
+    group: A
+    car_mandatory: true
     car_waiver_allowed: false
     car_maintenance: 0
 
   - name: "נהג/ת הפצה"
+    group: A
+    car_mandatory: true
     car_waiver_allowed: false
     car_maintenance: 0
 
   - name: "מפקח/ת איכות במפעל"
+    group: A
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1200
 
   - name: "רכז/ת רכש"
+    group: A
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1200
 
   - name: "מהנדס/ת תהליך"
+    group: B
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1500
 
   - name: "מפתח/ת תוכנה"
+    group: B
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1500
 
   - name: "אנליסט/ית נתונים"
+    group: B
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 1500
 
   - name: "מנהל/ת מוצר"
+    group: C
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 2000
 
   - name: "מנהל/ת פיתוח"
+    group: C
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 2000
 
   - name: "מנהל/ת משאבי אנוש"
+    group: C
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 2000
 
   - name: "מנהל/ת מחלקה"
+    group: D
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 2600
 
   - name: "מנהל/ת חטיבה"
+    group: D
+    car_mandatory: false
     car_waiver_allowed: true
     car_maintenance: 3000

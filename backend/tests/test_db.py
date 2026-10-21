@@ -103,7 +103,7 @@ def test_running_the_migrations_again_changes_nothing(migrated: Engine) -> None:
     run_migrations(migrated)
 
     with migrated.connect() as connection:
-        assert MigrationContext.configure(connection).get_current_revision() == "0001"
+        assert MigrationContext.configure(connection).get_current_revision() == "0002"
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
 
 

@@ -138,7 +138,6 @@ def test_the_study_fund_cites_the_public_page_of_its_ceiling(rules: RulesConfig)
 
 def test_pending_lists_the_open_questions_with_their_defaults(rules: RulesConfig) -> None:
     assert {item.field: item.default for item in rules.pending} == {
-        "ev_refund.mode": "net",
         "payroll.credit_point.value": 242,
         "payroll.study_fund.employer_rate_percent": 0,
     }

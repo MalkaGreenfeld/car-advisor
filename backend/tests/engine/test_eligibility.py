@@ -5,7 +5,7 @@ import pytest
 
 from car_advisor.engine import copy_he
 from car_advisor.engine.config import CarCatalog, OccupationsTable, RulesConfig
-from car_advisor.engine.eligibility import EligibilityResult, check_eligibility
+from car_advisor.engine.eligibility import EligibilityResult, check_eligibility, employee_group
 from car_advisor.engine.types import (
     CarAlternative,
     CarKey,
@@ -119,8 +119,27 @@ CATALOG = CarCatalog.model_validate(
 OCCUPATIONS = OccupationsTable.model_validate(
     {
         "occupations": [
-            {"name": "Office administration", "car_waiver_allowed": True, "car_maintenance": 1500},
-            {"name": " Field sales ", "car_waiver_allowed": False, "car_maintenance": 0},
+            {
+                "name": "Office administration",
+                "group": "B",
+                "car_mandatory": False,
+                "car_waiver_allowed": True,
+                "car_maintenance": 1500,
+            },
+            {
+                "name": " Field sales ",
+                "group": "B",
+                "car_mandatory": True,
+                "car_waiver_allowed": False,
+                "car_maintenance": 0,
+            },
+            {
+                "name": "Division manager",
+                "group": "D",
+                "car_mandatory": False,
+                "car_waiver_allowed": True,
+                "car_maintenance": 3000,
+            },
         ]
     }
 )
@@ -216,6 +235,50 @@ def test_family_track_follows_the_children_threshold(children: int, status: str)
     assert result.reason == copy_he.family_track_reason(children, THRESHOLD, allowed=allowed)
 
 
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [
+        pytest.param(EmployeeProfile(occupation="Office administration"), Group.B, id="occupation"),
+        pytest.param(EmployeeProfile(occupation=" Division manager "), Group.D, id="padded"),
+        pytest.param(
+            EmployeeProfile(occupation="Office administration", eligibility_group=Group.D),
+            Group.D,
+            id="override-wins",
+        ),
+        pytest.param(EmployeeProfile(eligibility_group=Group.C), Group.C, id="override-alone"),
+        pytest.param(EmployeeProfile(occupation="Gardener"), None, id="unlisted-occupation"),
+        pytest.param(EmployeeProfile(), None, id="no-occupation"),
+    ],
+)
+def test_the_employee_group_is_the_override_else_the_occupations_group(
+    profile: EmployeeProfile, expected: Group | None
+) -> None:
+    assert employee_group(profile, OCCUPATIONS) == expected
+
+
+@pytest.mark.parametrize(
+    ("occupation", "car_group", "status"),
+    [
+        pytest.param("Office administration", Group.B, "eligible", id="b-takes-b"),
+        pytest.param("Office administration", Group.C, "not_eligible", id="b-refused-c"),
+        pytest.param("Division manager", Group.D, "eligible", id="d-takes-d"),
+    ],
+)
+def test_a_regular_car_is_decided_by_the_group_of_the_occupation(
+    occupation: str, car_group: Group, status: str
+) -> None:
+    result = check_car(CAR_KEYS[car_group], EmployeeProfile(occupation=occupation))
+
+    assert result.status == status
+
+
+def test_an_unlisted_occupation_leaves_a_regular_car_missing_the_occupation() -> None:
+    result = check_car(CAR_KEYS[Group.A], EmployeeProfile(occupation="Gardener"))
+
+    assert result.status == "missing"
+    assert result.missing_fields == (MissingField.OCCUPATION,)
+
+
 def test_each_track_needs_only_its_own_profile_field() -> None:
     family = check_car(FAMILY_KEY, EmployeeProfile(children_under_23=THRESHOLD))
     regular = check_car(CAR_KEYS[Group.A], EmployeeProfile(eligibility_group=Group.A))
@@ -289,8 +352,8 @@ def test_an_absent_record_is_missing_its_powertrain() -> None:
             CAR_KEYS[Group.A],
             EmployeeProfile(),
             None,
-            (MissingField.POWERTRAIN, MissingField.ELIGIBILITY_GROUP),
-            id="regular-track-without-record-or-group",
+            (MissingField.POWERTRAIN, MissingField.OCCUPATION),
+            id="regular-track-without-record-or-occupation",
         ),
         pytest.param(
             FAMILY_KEY,
@@ -317,7 +380,7 @@ def test_an_absent_record_is_missing_its_powertrain() -> None:
             CAR_KEYS[Group.A],
             EmployeeProfile(children_under_23=5),
             Powertrain.CONVENTIONAL,
-            (MissingField.ELIGIBILITY_GROUP,),
+            (MissingField.OCCUPATION,),
             id="regular-track-needs-no-children",
         ),
         pytest.param(

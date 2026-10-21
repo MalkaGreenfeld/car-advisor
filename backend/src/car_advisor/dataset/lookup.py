@@ -243,9 +243,34 @@ class CatalogMismatch(Exception):
         self.missing = list(missing)
 
 
-def check_catalog(lookup: CarLookup, catalog: CarCatalog) -> None:
-    """Raise a CatalogMismatch that lists every catalog car whose key is not in the dataset."""
-    absent = set(lookup.missing_keys(car.official_key for car in catalog.cars))
-    missing = [car for car in catalog.cars if car.official_key in absent]
+@dataclass(frozen=True)
+class UsageValueMismatch:
+    """A catalog car whose usage value differs from the one of its dataset record (Req 4.19)."""
+
+    display_name: str
+    car_key: CarKey
+    catalog_usage_value: int
+    dataset_usage_value: int
+
+
+def check_catalog(lookup: CarLookup, catalog: CarCatalog) -> list[UsageValueMismatch]:
+    """Check every catalog car against the dataset.
+
+    Raises a CatalogMismatch that lists every car whose key is not in the dataset (Req 4.7).
+    Otherwise returns the cars whose usage value differs from their record, in catalog order. That
+    is only a warning: every calculation uses the dataset's value (Req 4.18).
+    """
+    records = lookup.get_many(car.official_key for car in catalog.cars)
+    missing = [car for car in catalog.cars if car.official_key not in records]
     if missing:
         raise CatalogMismatch(missing)
+    return [
+        UsageValueMismatch(
+            display_name=car.display_name,
+            car_key=car.official_key,
+            catalog_usage_value=car.usage_value,
+            dataset_usage_value=records[car.official_key].usage_value,
+        )
+        for car in catalog.cars
+        if car.usage_value is not None and car.usage_value != records[car.official_key].usage_value
+    ]

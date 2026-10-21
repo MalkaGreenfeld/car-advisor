@@ -21,16 +21,19 @@ from car_advisor.db import as_utc, utc_now
 from car_advisor.engine import copy_he
 from car_advisor.engine.comparison import CAR_FIELDS
 from car_advisor.engine.config import CatalogCar
+from car_advisor.engine.eligibility import employee_group
 from car_advisor.engine.types import CarKey, EmployeeProfile, Group, MissingField, Money
+from car_advisor.rules.loader import AppConfig
 
 # The longest name or occupation that a question repeats from what the employee typed. It keeps
 # the text within its 1,000 characters and the name within its column, whatever was typed.
 _MAX_TYPED: Final = 100
 
-# The widths of the answer_note and answer_text columns. An answer that is accepted must fit
-# them, because SQL Server refuses a longer value and SQLite would store it unchecked.
+# The widths of the answer_note, answer_text and answer_choice columns. An answer that is accepted
+# must fit them, because SQL Server refuses a longer value and SQLite would store it unchecked.
 _NOTE_MAX: Final = 500
 _TEXT_MAX: Final = 2000
+_CHOICE_MAX: Final = 200
 
 # A change is applied once, and once more on freshly read data if a concurrent edit got in first,
 # as in ConversationService.
@@ -39,8 +42,15 @@ _ATTEMPTS: Final = 2
 
 class RepQuestionType(StrEnum):
     PARTICIPATION = "participation"
-    OCCUPATION_WAIVER = "occupation_waiver"
+    # A choice among the names of Occupations_Table.
+    OCCUPATION = "occupation"
+    # A choice among the groups A-D.
+    ELIGIBILITY_GROUP = "eligibility_group"
     OTHER = "other"
+
+
+# The types whose answer is a choice, and the form field that each of the other types needs.
+_CHOICE_TYPES: Final = frozenset({RepQuestionType.OCCUPATION, RepQuestionType.ELIGIBILITY_GROUP})
 
 
 class RepQuestionStatus(StrEnum):
@@ -53,6 +63,7 @@ class RepField(StrEnum):
 
     NEW_CAR_PARTICIPATION = "new_car_participation"
     OCCUPATION = "occupation"
+    ELIGIBILITY_GROUP = "eligibility_group"
     CURRENT_CAR = "current_car"
     CURRENT_CAR_PARTICIPATION = "current_car_participation"
 
@@ -66,11 +77,13 @@ class RepField(StrEnum):
             case RepField.NEW_CAR_PARTICIPATION:
                 return RepQuestionType.PARTICIPATION
             case RepField.OCCUPATION:
-                return RepQuestionType.OCCUPATION_WAIVER
+                return RepQuestionType.OCCUPATION
+            case RepField.ELIGIBILITY_GROUP:
+                return RepQuestionType.ELIGIBILITY_GROUP
             case RepField.CURRENT_CAR | RepField.CURRENT_CAR_PARTICIPATION:
                 # Only the participation in a new car has a structured answer (Req 10.5). The
                 # participation in the current car is free text, which the agent relays to the
-                # employee (design, Open Questions 12).
+                # employee (design, Open Questions 7).
                 return RepQuestionType.OTHER
 
 
@@ -85,26 +98,34 @@ class RepCar(BaseModel, frozen=True):
     car_key: CarKey
 
 
+class RepChoice(BaseModel, frozen=True):
+    """One choice of an occupation or eligibility group question: the stored value and its label."""
+
+    value: str
+    label: str
+
+
 class StoredAnswer(BaseModel, frozen=True):
     """The answer of Transport_Rep as stored.
 
-    A participation answer has an amount and its effective date, and may have a note. Any other
-    answer is the text alone.
+    A participation answer has an amount and its effective date, and may have a note. A choice
+    answer is the chosen table name or group, and any other answer is the text alone.
     """
 
     amount: Decimal | None
     effective_date: date | None
     note: str | None
     text: str | None
+    choice: str | None = None
 
 
 class RepQuestionView(BaseModel, frozen=True):
     """A question as Rep_Screen shows it.
 
-    It holds the ID of the question and the fields of Req 12.3, with the answer once there is one.
-    The conversation ID and everything in the profile are left out on purpose, because the
-    Rep_Screen needs no login, and the conversation ID alone opens the employee's screen
-    (Req 12.4, 12.5).
+    It holds the ID of the question and the fields of Req 12.3, the catalog amount of the car and
+    the choices of the question, with the answer once there is one. The conversation ID and
+    everything in the profile are left out on purpose, because the Rep_Screen needs no login, and
+    the conversation ID alone opens the employee's screen (Req 12.4, 12.5).
     """
 
     id: UUID
@@ -114,6 +135,10 @@ class RepQuestionView(BaseModel, frozen=True):
     employee: RepEmployee
     eligibility_group: Group | None
     car: RepCar | None
+    # The Default_Participation of the car of a participation question, else None (Req 12.6).
+    suggested_amount: Decimal | None = None
+    # The choices of an occupation or eligibility group question, else None.
+    choices: tuple[RepChoice, ...] | None = None
     status: RepQuestionStatus
     answer: StoredAnswer | None
 
@@ -145,7 +170,17 @@ class TextAnswer(BaseModel, frozen=True, hide_input_in_errors=True):
         return text
 
 
-type SubmittedAnswer = ParticipationAnswer | TextAnswer
+class ChoiceAnswer(BaseModel, frozen=True, hide_input_in_errors=True):
+    """The answer to an occupation or eligibility group question: one of its choices.
+
+    Which values are offered depends on the question, so `answer` checks the value against the
+    choices of the question it answers (Req 10.6).
+    """
+
+    choice: Annotated[str, Field(min_length=1, max_length=_CHOICE_MAX)]
+
+
+type SubmittedAnswer = ParticipationAnswer | ChoiceAnswer | TextAnswer
 
 
 @dataclass(frozen=True)
@@ -173,7 +208,7 @@ class QuestionNotFound:
 
 @dataclass(frozen=True)
 class InvalidAnswer:
-    """The question is open and takes the other kind of answer (Req 10.5, 10.6).
+    """The question is open and refuses this answer, for its kind or its choice (Req 10.5, 10.6).
 
     The fields are the names of the form fields that the question needs and this answer lacks,
     so Rep_Screen can show an error next to each (Req 12.7). They never hold a value.
@@ -183,6 +218,21 @@ class InvalidAnswer:
 
 
 type AnswerOutcome = Answered | AlreadyAnswered | QuestionNotFound | InvalidAnswer
+
+
+def choices_for(question_type: RepQuestionType, config: AppConfig) -> tuple[RepChoice, ...] | None:
+    """The choices of a question type: the table names, the four groups, or None for no choice."""
+    match question_type:
+        case RepQuestionType.OCCUPATION:
+            names = (item.name.strip() for item in config.occupations.occupations)
+            return tuple(RepChoice(value=name, label=name) for name in names)
+        case RepQuestionType.ELIGIBILITY_GROUP:
+            return tuple(
+                RepChoice(value=group.value, label=copy_he.GROUP_LETTERS[group])
+                for group in config.rules.groups.order
+            )
+        case _:
+            return None
 
 
 def open_or_get(
@@ -205,7 +255,7 @@ def open_or_get(
 
     The car counts only for the fields that belong to a car, as in the missing items of the
     engine. Raises ConversationNotFound, and ValueError when the field lacks what its text needs:
-    a car for the participation, the occupation in the profile for the waiver.
+    a car for the participation, the occupation in the profile for the occupation and the group.
     """
     conversation = session.get(
         ConversationRow, conversation_id, options=[defer(ConversationRow.agent_history)]
@@ -213,7 +263,8 @@ def open_or_get(
     if conversation is None:
         raise ConversationNotFound
     profile = EmployeeProfile.model_validate_json(conversation.profile)
-    group = profile.eligibility_group
+    # The group in use, from the occupation or the representative (Req 5.23).
+    group = employee_group(profile, conversations.config.occupations)
 
     asked_car = car if field.missing_field in CAR_FIELDS else None
     car_key = NO_CAR if asked_car is None else str(asked_car.official_key)
@@ -261,14 +312,16 @@ def answer(
 
     One conditional UPDATE decides which of several answers to the same question counts: it
     stores an answer only while the question is open and takes this kind of answer, so it matches
-    for the first and for none after it (Req 10.7, 10.8). The recalculation then applies a
-    Participation to the car of the question, with its effective date (Req 6.17, 6.19).
+    for the first and for none after it (Req 10.7, 10.8). A choice answer is written to the
+    profile in the same transaction: the table name as the occupation, the group as the
+    Group_Override (Req 10.17). The recalculation then applies it, and a Participation to the car
+    of the question, with its effective date (Req 6.17, 6.19).
 
     The answer is committed before this returns, so the question is `answered` before the caller
     resumes the conversation. Every other outcome leaves the question as it was. A question that
     is answered already refuses any answer as AlreadyAnswered, and an open one refuses the wrong
-    kind as InvalidAnswer (Req 10.5, 10.6). The values themselves are checked when the answer is
-    built, by the models, which raise a ValidationError.
+    kind, or a choice it does not offer, as InvalidAnswer (Req 10.5, 10.6). The values themselves
+    are checked when the answer is built, by the models, which raise a ValidationError.
 
     A StaleDataError at the commit means that a concurrent edit of the conversation got in first.
     It rolls the answer back with the recalculation, so the call is repeated once on fresh data,
@@ -282,7 +335,7 @@ def answer(
     raise ConversationConflict("the conversation was changed by another request")
 
 
-def list_for_rep(sessions: sessionmaker[Session]) -> list[RepQuestionView]:
+def list_for_rep(sessions: sessionmaker[Session], config: AppConfig) -> list[RepQuestionView]:
     """List every question: the open ones first, then the answered ones, oldest first in each."""
     open_first = case((RepQuestionRow.status == RepQuestionStatus.OPEN.value, 0), else_=1)
     with sessions() as session:
@@ -292,64 +345,109 @@ def list_for_rep(sessions: sessionmaker[Session]) -> list[RepQuestionView]:
                 open_first, RepQuestionRow.created_at, RepQuestionRow.id
             )
         ).all()
-        return [_view(row) for row in rows]
+        return [_view(row, config) for row in rows]
 
 
 def _answer_once(
     conversations: ConversationService, question_id: UUID, submitted: SubmittedAnswer
 ) -> AnswerOutcome:
+    config = conversations.config
     with conversations.transaction() as session:
-        if not _store(session, question_id, submitted):
-            return _not_stored(session, question_id, submitted)
+        # The UPDATE comes first and alone decides: a read before it would make concurrent
+        # answers wait on each other's locks instead of one of them simply matching no row.
+        if not _store(session, question_id, _types_taking(submitted, config), submitted):
+            return _not_stored(session, question_id)
         question = session.get_one(RepQuestionRow, question_id)
+        if isinstance(submitted, ChoiceAnswer):
+            question_type = RepQuestionType(question.question_type)
+            conversations.apply_rep_answer(
+                session, question.conversation_id, _profile_change(question_type, submitted)
+            )
         conversations.recalculate(session, question.conversation_id)
         return Answered(
-            question=_view(question),
+            question=_view(question, config),
             conversation_id=question.conversation_id,
             field=RepField(question.missing_field),
         )
 
 
-def _store(session: Session, question_id: UUID, submitted: SubmittedAnswer) -> bool:
-    """Store the answer if the question is open and takes this kind of answer."""
+def _types_taking(submitted: SubmittedAnswer, config: AppConfig) -> frozenset[RepQuestionType]:
+    """The question types that accept this answer, its choice included."""
     match submitted:
         case ParticipationAnswer():
-            takes = RepQuestionRow.question_type == RepQuestionType.PARTICIPATION.value
+            return frozenset({RepQuestionType.PARTICIPATION})
+        case TextAnswer():
+            return frozenset({RepQuestionType.OTHER})
+        case ChoiceAnswer(choice=choice):
+            return frozenset(
+                question_type
+                for question_type in _CHOICE_TYPES
+                if choice in {item.value for item in choices_for(question_type, config) or ()}
+            )
+
+
+def _not_stored(
+    session: Session, question_id: UUID
+) -> AlreadyAnswered | QuestionNotFound | InvalidAnswer:
+    found = session.execute(
+        select(RepQuestionRow.status, RepQuestionRow.question_type).where(
+            RepQuestionRow.id == question_id
+        )
+    ).one_or_none()
+    if found is None:
+        return QuestionNotFound()
+    status, question_type = found
+    if status == RepQuestionStatus.ANSWERED.value:
+        return AlreadyAnswered()
+    # The question is open, so the answer was refused for its kind or its choice.
+    return InvalidAnswer(fields=_fields_needed(RepQuestionType(question_type)))
+
+
+def _fields_needed(question_type: RepQuestionType) -> tuple[str, ...]:
+    if question_type is RepQuestionType.PARTICIPATION:
+        return ("amount", "effective_date")
+    if question_type in _CHOICE_TYPES:
+        return ("choice",)
+    return ("text",)
+
+
+def _profile_change(question_type: RepQuestionType, submitted: ChoiceAnswer) -> dict[str, object]:
+    if question_type is RepQuestionType.OCCUPATION:
+        return {"occupation": submitted.choice}
+    return {"eligibility_group": submitted.choice}
+
+
+def _store(
+    session: Session,
+    question_id: UUID,
+    types: frozenset[RepQuestionType],
+    submitted: SubmittedAnswer,
+) -> bool:
+    """Store the answer if the question is open and of a type that takes it."""
+    if not types:
+        return False
+    match submitted:
+        case ParticipationAnswer():
             stored: dict[str, object] = {
                 "participation_amount": submitted.amount,
                 "participation_effective_date": submitted.effective_date,
                 "answer_note": submitted.note,
             }
         case TextAnswer():
-            takes = RepQuestionRow.question_type != RepQuestionType.PARTICIPATION.value
             stored = {"answer_text": submitted.text}
+        case ChoiceAnswer():
+            stored = {"answer_choice": submitted.choice}
     store = (
         update(RepQuestionRow)
         .where(
             RepQuestionRow.id == question_id,
             RepQuestionRow.status == RepQuestionStatus.OPEN.value,
-            takes,
+            RepQuestionRow.question_type.in_(sorted(item.value for item in types)),
         )
         .values(status=RepQuestionStatus.ANSWERED.value, answered_at=utc_now(), **stored)
     )
     # On the connection, because that result type has the row count.
     return session.connection().execute(store).rowcount == 1
-
-
-def _not_stored(
-    session: Session, question_id: UUID, submitted: SubmittedAnswer
-) -> AlreadyAnswered | QuestionNotFound | InvalidAnswer:
-    status = session.scalar(select(RepQuestionRow.status).where(RepQuestionRow.id == question_id))
-    if status is None:
-        return QuestionNotFound()
-    if status == RepQuestionStatus.ANSWERED.value:
-        return AlreadyAnswered()
-    # The question is open, so the answer was refused for its kind.
-    match submitted:
-        case TextAnswer():
-            return InvalidAnswer(fields=("amount", "effective_date"))
-        case ParticipationAnswer():
-            return InvalidAnswer(fields=("text",))
 
 
 def _question_text(
@@ -366,7 +464,9 @@ def _question_text(
             recorded = _clip(occupation or "")
             if not recorded:
                 raise ValueError("an occupation question needs the occupation in the profile")
-            return copy_he.occupation_waiver_question(subject, recorded)
+            return copy_he.occupation_question(subject, recorded)
+        case RepField.ELIGIBILITY_GROUP:
+            return copy_he.eligibility_group_question(subject, _clip(occupation or "") or None)
         case RepField.CURRENT_CAR:
             return copy_he.current_car_question(subject)
         case RepField.CURRENT_CAR_PARTICIPATION:
@@ -380,10 +480,18 @@ def _clip(text: str) -> str:
     return f"{stripped[: _MAX_TYPED - 1]}…"
 
 
-def _view(row: RepQuestionRow) -> RepQuestionView:
+def _view(row: RepQuestionRow, config: AppConfig) -> RepQuestionView:
+    question_type = RepQuestionType(row.question_type)
+    car_key = None if row.car_key == NO_CAR else CarKey.parse(row.car_key)
+    catalog_car = None if car_key is None else config.catalog.find(car_key)
+    suggested = (
+        catalog_car.default_participation
+        if catalog_car is not None and question_type is RepQuestionType.PARTICIPATION
+        else None
+    )
     return RepQuestionView(
         id=row.id,
-        question_type=RepQuestionType(row.question_type),
+        question_type=question_type,
         question_text=row.question_text,
         created_at=as_utc(row.created_at),
         employee=RepEmployee(
@@ -391,20 +499,21 @@ def _view(row: RepQuestionRow) -> RepQuestionView:
             number=row.employee_number,
         ),
         eligibility_group=None if row.eligibility_group is None else Group(row.eligibility_group),
-        car=None
-        if row.car_key == NO_CAR
-        else RepCar(display_name=row.car_display_name, car_key=CarKey.parse(row.car_key)),
+        car=None if car_key is None else RepCar(display_name=row.car_display_name, car_key=car_key),
+        suggested_amount=suggested,
+        choices=choices_for(question_type, config),
         status=RepQuestionStatus(row.status),
         answer=_stored_answer(row),
     )
 
 
 def _stored_answer(row: RepQuestionRow) -> StoredAnswer | None:
-    if row.participation_amount is None and row.answer_text is None:
+    if row.participation_amount is None and row.answer_text is None and row.answer_choice is None:
         return None
     return StoredAnswer(
         amount=row.participation_amount,
         effective_date=row.participation_effective_date,
         note=row.answer_note,
         text=row.answer_text,
+        choice=row.answer_choice,
     )

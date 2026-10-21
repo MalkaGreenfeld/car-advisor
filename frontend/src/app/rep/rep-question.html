@@ -73,6 +73,12 @@
           <dd><app-bidi-text [text]="note" /></dd>
         </div>
       }
+      @if (answer.choice; as choice) {
+        <div>
+          <dt>{{ storedCopy.choice }}</dt>
+          <dd><app-bidi-text [text]="choice" /></dd>
+        </div>
+      }
       @if (answer.text; as text) {
         <div>
           <dt>{{ storedCopy.text }}</dt>

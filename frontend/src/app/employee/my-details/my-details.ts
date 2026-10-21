@@ -1,6 +1,7 @@
-import { Component, computed, inject, linkedSignal } from '@angular/core';
+import { Component, computed, inject, linkedSignal, signal } from '@angular/core';
 import { form, schema, validate } from '@angular/forms/signals';
 
+import { ApiClient } from '../../shared/api';
 import { ConversationState, FieldError, ProfileChanges } from '../../shared/api-models';
 import { groupLetter } from '../../shared/format';
 import { EmployeeStore } from '../employee-store';
@@ -16,7 +17,6 @@ import {
   FieldKind,
   FieldValue,
   formatValue,
-  GROUPS,
   isDetailsField,
   parseValue,
   textOf,
@@ -36,17 +36,13 @@ interface FieldRow {
   readonly inputMode?: 'decimal' | 'numeric';
 }
 
-// A profile field that has an editor of its own. The row keeps its place in the script order.
+// A profile field that has an editor of its own, or the group, which is only shown. The row keeps
+// its place in the script order.
 interface EditorRow {
-  readonly type: 'pay_components' | 'current_car';
+  readonly type: 'group' | 'pay_components' | 'current_car';
 }
 
 type Row = FieldRow | EditorRow;
-
-const GROUP_OPTIONS: readonly SelectOption[] = [
-  { value: '', label: copy.choices.noGroup },
-  ...GROUPS.map((group) => ({ value: group, label: groupLetter(group) })),
-];
 
 const YES_NO_OPTIONS: readonly SelectOption[] = [
   { value: '', label: copy.choices.noAnswer },
@@ -55,7 +51,6 @@ const YES_NO_OPTIONS: readonly SelectOption[] = [
 ];
 
 const CONTROLS: Record<FieldKind, Pick<FieldRow, 'options' | 'inputMode'>> = {
-  group: { options: GROUP_OPTIONS },
   yes_no: { options: YES_NO_OPTIONS },
   amount: { inputMode: 'decimal' },
   percent: { inputMode: 'decimal' },
@@ -70,10 +65,12 @@ function fieldRow(name: DetailsFieldName): FieldRow {
   return { type: 'field', name, ...FIELD_COPY[name], ...CONTROLS[FIELD_KINDS[name]] };
 }
 
-// The order of the challenge script (Req 9.1). The fields that only some alternatives ask for
-// come after it, and the name last.
+// The order of the challenge script (Req 9.1): the group, which follows from the occupation, then
+// the occupation and the salary. The fields that only some alternatives ask for come after it, and
+// the name last.
 const ROWS: readonly Row[] = [
-  fieldRow('eligibility_group'),
+  { type: 'group' },
+  fieldRow('occupation'),
   fieldRow('base_salary'),
   { type: 'pay_components' },
   fieldRow('pension_rate_percent'),
@@ -82,7 +79,6 @@ const ROWS: readonly Row[] = [
   fieldRow('has_current_car'),
   { type: 'current_car' },
   fieldRow('current_car_participation'),
-  fieldRow('occupation'),
   fieldRow('children_under_23'),
   fieldRow('display_name'),
 ];
@@ -130,10 +126,34 @@ function changeOf(name: DetailsFieldName, value: FieldValue): ProfileChanges {
 export class MyDetails {
   private readonly store = inject(EmployeeStore);
   private readonly queue = inject(SaveQueue);
+  private readonly api = inject(ApiClient);
 
   protected readonly rows = ROWS;
+  protected readonly groupCopy = copy.group;
+
+  // The names of the occupations table, offered in the occupation field (Req 11.19). Only a
+  // suggestion: if they cannot be read, the field still takes any text.
+  protected readonly occupationNames = signal<readonly string[]>([]);
+
+  // The group in use with its source, read-only (Req 11.2).
+  protected readonly groupText = computed(() => {
+    const view = this.store.state()?.employee_group ?? null;
+    if (view === null || view.group === null) {
+      return copy.group.unknown;
+    }
+    const source =
+      view.source === 'representative' ? copy.group.fromRepresentative : copy.group.fromOccupation;
+    return `${groupLetter(view.group)} (${source})`;
+  });
 
   private readonly profile = computed(() => this.store.state()?.profile ?? null);
+
+  constructor() {
+    this.api.getOccupations().then(
+      (response) => this.occupationNames.set(response.names),
+      () => this.occupationNames.set([]),
+    );
+  }
 
   // The text of every input. A reload of the stored profile does not replace the text of a field
   // that the employee is changing, and another conversation replaces all of it.

@@ -29,9 +29,11 @@ UNKNOWN_ID = "6f0c1c2e-3b4a-4c5d-8e9f-0a1b2c3d4e5f"
 SALARY = "7654321"
 COMPONENT_LABEL = "Zebra commission"
 COMPONENT_AMOUNT = "123457"
+PRODUCT_MANAGER = "מנהל/ת מוצר"
 PRIVATE_PROFILE = {
     "display_name": "Dana",
-    "eligibility_group": "C",
+    # A product manager, so group C by the occupation.
+    "occupation": PRODUCT_MANAGER,
     "base_salary": SALARY,
     "pay_components": [
         {"kind": "commission", "label": COMPONENT_LABEL, "amount": COMPONENT_AMOUNT}
@@ -50,6 +52,8 @@ VIEW_KEYS = {
     "employee",
     "eligibility_group",
     "car",
+    "suggested_amount",
+    "choices",
     "status",
     "answer",
 }
@@ -122,6 +126,16 @@ def participation(services: Services, conversation: str, car: CatalogCar) -> str
 @pytest.fixture
 def free_text(services: Services, conversation: str) -> str:
     return ask(services, conversation, RepField.CURRENT_CAR, None)
+
+
+@pytest.fixture
+def occupation_choice(services: Services, conversation: str) -> str:
+    return ask(services, conversation, RepField.OCCUPATION, None)
+
+
+@pytest.fixture
+def group_choice(services: Services, conversation: str) -> str:
+    return ask(services, conversation, RepField.ELIGIBILITY_GROUP, None)
 
 
 def answer_url(question: str) -> str:
@@ -292,6 +306,8 @@ def participation_body(**changes: Any) -> dict[str, Any]:
 
 P = "participation"
 T = "free_text"
+OC = "occupation_choice"
+GR = "group_choice"
 
 
 @pytest.mark.parametrize(
@@ -333,6 +349,14 @@ T = "free_text"
         pytest.param(T, {"text": " \t\n "}, ("text",), id="blank-text"),
         pytest.param(T, {"text": "x" * 2001}, ("text",), id="long-text"),
         pytest.param(T, PARTICIPATION, ("text",), id="participation-for-a-text"),
+        pytest.param(T, {"choice": "B"}, ("text",), id="choice-for-a-text"),
+        pytest.param(OC, {"choice": "רופא"}, ("choice",), id="unlisted-occupation"),
+        pytest.param(OC, {"choice": "B"}, ("choice",), id="group-for-an-occupation"),
+        pytest.param(OC, TEXT, ("choice",), id="text-for-an-occupation"),
+        pytest.param(GR, {"choice": "E"}, ("choice",), id="group-e"),
+        pytest.param(GR, {"choice": "ב"}, ("choice",), id="hebrew-letter"),
+        pytest.param(GR, {"choice": ""}, ("choice",), id="empty-choice"),
+        pytest.param(GR, PARTICIPATION, ("choice",), id="participation-for-a-group"),
     ],
 )
 def test_an_invalid_answer_gets_422_with_a_message_per_field_and_the_question_stays_open(
@@ -431,3 +455,77 @@ def test_the_log_has_the_route_and_the_status_and_none_of_the_answer(
     everything = json.dumps(logged(caplog), ensure_ascii=False)
     for private in ("4455", "Private note", "987654", SALARY, "Dana"):
         assert private not in everything
+
+
+def test_a_participation_question_carries_the_catalog_amount_and_no_choices(
+    app_settings: Settings, sqlite_startup: Path
+) -> None:
+    catalog = app_settings.catalog_path
+    catalog.write_text(catalog.read_text() + "    default_participation: 300\n")
+    with TestClient(create_app(app_settings)) as started:
+        services: Services = started.app.state.services  # type: ignore[attr-defined]
+        created = started.post(CONVERSATIONS).json()["id"]
+        started.patch(f"{CONVERSATIONS}/{created}/profile", json={"changes": PRIVATE_PROFILE})
+        ask(services, created, RepField.NEW_CAR_PARTICIPATION, services.config.catalog.cars[0])
+
+        [question] = listed(started)
+
+    assert (Decimal(question["suggested_amount"]), question["choices"]) == (Decimal(300), None)
+
+
+def test_a_question_of_another_type_has_no_catalog_amount(
+    client: TestClient, participation: str, free_text: str
+) -> None:
+    # The test catalog lists no default participation.
+    assert [question["suggested_amount"] for question in listed(client)] == [None, None]
+
+
+def test_the_choice_questions_list_the_table_names_and_the_four_groups(
+    client: TestClient, services: Services, occupation_choice: str, group_choice: str
+) -> None:
+    questions = {question["id"]: question for question in listed(client)}
+
+    occupation, group = questions[occupation_choice], questions[group_choice]
+    assert occupation["question_type"] == "occupation"
+    assert [choice["value"] for choice in occupation["choices"]] == [
+        item.name for item in services.config.occupations.occupations
+    ]
+    assert group["question_type"] == "eligibility_group"
+    assert group["choices"] == [
+        {"value": "A", "label": "א"},
+        {"value": "B", "label": "ב"},
+        {"value": "C", "label": "ג"},
+        {"value": "D", "label": "ד"},
+    ]
+
+
+def test_a_group_answer_is_stored_written_to_the_profile_and_resumes_once(
+    client: TestClient, conversation: str, group_choice: str, runner: RecordingRunner
+) -> None:
+    response = client.post(answer_url(group_choice), json={"choice": "D"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["status"], body["answer"]["choice"], body["answer"]["text"]) == (
+        "answered",
+        "D",
+        None,
+    )
+    state = client.get(f"{CONVERSATIONS}/{conversation}").json()
+    assert state["employee_group"] == {"group": "D", "source": "representative"}
+    [(_, note)] = runner.resumes
+    assert '"D"' in note
+
+
+def test_an_occupation_answer_becomes_the_occupation_of_the_profile(
+    client: TestClient, conversation: str, occupation_choice: str, runner: RecordingRunner
+) -> None:
+    chosen = "מנהל/ת חטיבה"
+
+    response = client.post(answer_url(occupation_choice), json={"choice": f" {chosen} "})
+
+    assert response.status_code == 200
+    assert response.json()["answer"]["choice"] == chosen
+    state = client.get(f"{CONVERSATIONS}/{conversation}").json()
+    assert state["profile"]["occupation"] == chosen
+    assert state["employee_group"] == {"group": "D", "source": "occupation"}

@@ -61,6 +61,10 @@ PAY_STEP = {
 }
 CAR_STEP = {MissingField.CURRENT_CAR, MissingField.CURRENT_CAR_PARTICIPATION}
 
+# Occupations of the shipped table: group C with a waiver, and group B with a mandatory car.
+PRODUCT_MANAGER = "מנהל/ת מוצר"
+FIELD_SALES = "נציג/ת מכירות שטח"
+
 # The figures of the scripted EV scenario. The representative's participation differs from the
 # employee's, so each column shows which source it came from.
 BASE_SALARY = 14200
@@ -133,8 +137,13 @@ def asking(seen: Seen) -> ModelResponse:
 @pytest.mark.parametrize(
     ("stored", "asked"),
     [
-        pytest.param({}, {MissingField.ELIGIBILITY_GROUP, MissingField.BASE_SALARY}, id="nothing"),
-        pytest.param({"base_salary": "14200"}, {MissingField.ELIGIBILITY_GROUP}, id="salary-only"),
+        pytest.param({}, {MissingField.OCCUPATION, MissingField.BASE_SALARY}, id="nothing"),
+        pytest.param({"base_salary": "14200"}, {MissingField.OCCUPATION}, id="salary-only"),
+        pytest.param(
+            {"occupation": "רופא שיניים", "base_salary": "14200"},
+            {MissingField.OCCUPATION},
+            id="unlisted-occupation",
+        ),
         pytest.param(BASICS, PAY_STEP, id="basics"),
         pytest.param(
             {**BASICS, "pay_components": [], "credit_points": "2.25"},
@@ -148,9 +157,9 @@ def asking(seen: Seen) -> ModelResponse:
             id="car-not-identified",
         ),
         pytest.param(
-            {**PAY, "has_current_car": False},
-            {MissingField.OCCUPATION},
-            id="no-car-needs-the-occupation",
+            {**PAY, "occupation": FIELD_SALES, "has_current_car": False},
+            CAR_STEP,
+            id="no-car-in-an-occupation-with-a-mandatory-car",
         ),
     ],
 )
@@ -174,7 +183,8 @@ def test_todays_maintenance_is_calculated_once_the_occupation_of_an_employee_wit
     conversation_id: UUID,
     runner_for: Callable[[ScriptedModel], AgentRunner],
 ) -> None:
-    service.update_profile(conversation_id, {**PAY, "has_current_car": False})
+    without_occupation = {name: value for name, value in PAY.items() if name != "occupation"}
+    service.update_profile(conversation_id, {**without_occupation, "has_current_car": False})
 
     def today_reply(seen: Seen) -> ModelResponse:
         today = seen.returned("compare_alternatives")["today"]
@@ -195,6 +205,12 @@ def test_todays_maintenance_is_calculated_once_the_occupation_of_an_employee_wit
     assert numbers_in(reply) == {Decimal(present(today.net_pay))}
 
 
+def tucson_default(config: AppConfig) -> Decimal | None:
+    car = config.catalog.find(TUCSON_KEY)
+    assert car is not None
+    return car.default_participation
+
+
 def interim_reply(seen: Seen) -> ModelResponse:
     """Tell the employee the notice of ask_rep, then Today, which the comparison already holds."""
     notice = seen.returned("ask_rep")["employee_notice"]
@@ -202,10 +218,11 @@ def interim_reply(seen: Seen) -> ModelResponse:
     return say(f"{notice}\n{TERMS['net_pay']}: {shekels(today['net_pay'])}")
 
 
-def test_a_participation_the_employee_does_not_know_goes_to_the_representative_not_into_the_reply(
+def test_a_confirmation_the_employee_asks_for_goes_to_the_representative_and_keeps_the_column(
     service: ConversationService,
     sessions: sessionmaker[Session],
     conversation_id: UUID,
+    app_config: AppConfig,
     runner_for: Callable[[ScriptedModel], AgentRunner],
 ) -> None:
     service.update_profile(conversation_id, NO_CAR_EMPLOYEE)
@@ -216,7 +233,7 @@ def test_a_participation_the_employee_does_not_know_goes_to_the_representative_n
         call("compare_alternatives", alternatives=[tucson]),
         interim_reply,
     )
-    message = "I like the Tucson, but I do not know the participation. Maybe 400?"
+    message = "I like the Tucson. Please confirm the participation with the representative, 400?"
 
     asyncio.run(runner_for(script).run_turn(conversation_id, message))
 
@@ -225,7 +242,8 @@ def test_a_participation_the_employee_does_not_know_goes_to_the_representative_n
         "ask_rep",
         "compare_alternatives",
     ]
-    [question] = list_for_rep(sessions)
+    [question] = list_for_rep(sessions, app_config)
+    assert question.suggested_amount == tucson_default(app_config)
     assert (question.status, question.question_type) == (
         RepQuestionStatus.OPEN,
         RepQuestionType.PARTICIPATION,
@@ -235,10 +253,15 @@ def test_a_participation_the_employee_does_not_know_goes_to_the_representative_n
     assert open_question.field is MissingField.NEW_CAR_PARTICIPATION
     comparison = stored_comparison(service, conversation_id)
     [column] = comparison.alternatives
-    assert (column.status, column.participation, column.net_pay) == ("pending", None, None)
-    assert [(item.field, item.sent_to_rep) for item in column.missing] == [
-        (MissingField.NEW_CAR_PARTICIPATION, True)
-    ]
+    # The column stays calculated with the catalog's amount, marked as awaiting the answer.
+    tucson_car = app_config.catalog.find(TUCSON_KEY)
+    assert tucson_car is not None
+    assert (column.status, column.participation) == (
+        "calculated",
+        tucson_car.default_participation,
+    )
+    assert (column.participation_source, column.participation_awaiting_rep) == ("catalog", True)
+    assert column.missing == ()
     [reply] = replies(service, conversation_id)
     assert copy_he.rep_question_sent(LABELS[MissingField.NEW_CAR_PARTICIPATION]) in reply
     # The figure that the employee offered is neither used nor repeated: Today's net pay is the
@@ -311,18 +334,21 @@ def test_a_group_b_employee_who_gives_up_the_car_gets_the_decision_the_reason_an
     app_config: AppConfig,
     runner_for: Callable[[ScriptedModel], AgentRunner],
 ) -> None:
+    without_occupation = {name: value for name, value in EMPLOYEE.items() if name != "occupation"}
     service.update_profile(
         conversation_id,
         {
-            **EMPLOYEE,
-            "eligibility_group": "B",
+            **without_occupation,
             "has_current_car": True,
             "current_car_key": str(SELTOS_KEY),
             "current_car_participation": "400",
         },
     )
+    # A group B occupation that allows the waiver, as in the challenge's scenario.
     occupation = next(
-        item for item in app_config.occupations.occupations if item.car_waiver_allowed
+        item
+        for item in app_config.occupations.occupations
+        if item.car_waiver_allowed and item.group is Group.B
     )
     waiver = {"kind": "waiver"}
     asking_for_the_occupation = ScriptedModel(
@@ -514,11 +540,17 @@ def test_the_scripted_ev_scenario_from_the_first_message_to_the_answer_of_the_re
 
     async def scenario() -> None:
         await send(
-            "I am in group C, and my base salary is 14,200.",
-            call("update_profile", changes={"eligibility_group": "C", "base_salary": BASE_SALARY}),
+            "I am a product manager, and my base salary is 14,200.",
+            call(
+                "update_profile",
+                changes={"occupation": PRODUCT_MANAGER, "base_salary": BASE_SALARY},
+            ),
             asking,
         )
-        assert (profile().eligibility_group, profile().base_salary) == (Group.C, BASE_SALARY)
+        assert (profile().occupation, profile().base_salary) == (PRODUCT_MANAGER, BASE_SALARY)
+        # The group follows from the occupation, and nobody stated it.
+        assert profile().eligibility_group is None
+        assert service.state(conversation_id).employee_group.group is Group.C
         assert named_fields(last_reply()) == PAY_STEP
 
         await send(
@@ -572,7 +604,7 @@ def test_the_scripted_ev_scenario_from_the_first_message_to_the_answer_of_the_re
         assert "Tesla Model 3" not in last_reply()
 
         choice = await send(
-            "I want the BYD Atto 3, but I do not know the participation.",
+            "I want the BYD Atto 3. Please have the representative confirm the participation.",
             together(
                 call("check_eligibility", alternative=atto_3),
                 call("ask_rep", field="new_car_participation", car_key=str(ATTO_3_KEY)),
@@ -585,14 +617,22 @@ def test_the_scripted_ev_scenario_from_the_first_message_to_the_answer_of_the_re
         assert open_question == OpenQuestion(
             MissingField.NEW_CAR_PARTICIPATION, "BYD Atto 3", ATTO_3_KEY
         )
-        [pending] = stored_comparison(service, conversation_id).alternatives
-        assert (pending.status, pending.participation, pending.net_pay) == ("pending", None, None)
-        assert [(item.field, item.sent_to_rep) for item in pending.missing] == [
-            (MissingField.NEW_CAR_PARTICIPATION, True)
-        ]
+        # The column is calculated at once with the catalog's amount, awaiting the confirmation.
+        [interim] = stored_comparison(service, conversation_id).alternatives
+        atto_3_car = app_config.catalog.find(ATTO_3_KEY)
+        assert atto_3_car is not None
+        assert (interim.status, interim.participation) == (
+            "calculated",
+            atto_3_car.default_participation,
+        )
+        assert (interim.participation_source, interim.participation_awaiting_rep) == (
+            "catalog",
+            True,
+        )
         assert copy_he.rep_question_sent(LABELS[MissingField.NEW_CAR_PARTICIPATION]) in last_reply()
 
-        [question] = list_for_rep(sessions)
+        [question] = list_for_rep(sessions, app_config)
+        assert question.suggested_amount == atto_3_car.default_participation
         outcome = answer(
             service,
             question.id,

@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from car_advisor.api import API_PREFIX
-from car_advisor.api.schemas import Health
+from car_advisor.api.schemas import CatalogWarning, Health
 from car_advisor.api.services import Services, get_services
 from car_advisor.dataset.models import UsageValueRow
 
@@ -35,6 +35,7 @@ def _count_records(sessions: sessionmaker[Session], tax_year: int) -> int:
 
 async def _check_health(services: Services) -> Health:
     tax_year = services.settings.tax_year
+    warnings = tuple(CatalogWarning.from_mismatch(item) for item in services.catalog_warnings)
     try:
         # A worker thread cannot be stopped. On a timeout, wait_for only stops waiting for it; the
         # thread closes its session when the database answers or gives up.
@@ -45,10 +46,18 @@ async def _check_health(services: Services) -> Health:
         # The type only: the message of a database error can quote the SQL parameters.
         logger.error("health_check_failed", extra={"error_type": type(error).__name__})
         return Health(
-            database_reachable=False, dataset_loaded=False, tax_year=tax_year, record_count=0
+            database_reachable=False,
+            dataset_loaded=False,
+            tax_year=tax_year,
+            record_count=0,
+            catalog_warnings=warnings,
         )
     return Health(
-        database_reachable=True, dataset_loaded=count > 0, tax_year=tax_year, record_count=count
+        database_reachable=True,
+        dataset_loaded=count > 0,
+        tax_year=tax_year,
+        record_count=count,
+        catalog_warnings=warnings,
     )
 
 

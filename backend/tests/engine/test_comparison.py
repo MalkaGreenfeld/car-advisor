@@ -173,8 +173,27 @@ CATALOG = make_catalog()
 OCCUPATIONS = OccupationsTable.model_validate(
     {
         "occupations": [
-            {"name": "Office administration", "car_waiver_allowed": True, "car_maintenance": 1500},
-            {"name": "Field sales", "car_waiver_allowed": False, "car_maintenance": 0},
+            {
+                "name": "Office administration",
+                "group": "C",
+                "car_mandatory": False,
+                "car_waiver_allowed": True,
+                "car_maintenance": 1500,
+            },
+            {
+                "name": "Warehouse",
+                "group": "C",
+                "car_mandatory": False,
+                "car_waiver_allowed": False,
+                "car_maintenance": 0,
+            },
+            {
+                "name": "Field sales",
+                "group": "C",
+                "car_mandatory": True,
+                "car_waiver_allowed": False,
+                "car_maintenance": 0,
+            },
         ]
     }
 )
@@ -189,11 +208,10 @@ RECORDS = {
 }
 REP_400 = RepParticipation(amount=D(400), effective_date=date(2026, 1, 1))
 
-# A group C employee with a 12,000 salary, a 6% pension, a 2.5% study fund and 2.25 credit
-# points, whose car has a usage value of 2,000 and a participation of 350. With this payroll the
-# hand-checked net pay is 9,285 without a car and 8,295 with the current car.
+# A group C employee (by the occupation) with a 12,000 salary, a 6% pension, a 2.5% study fund and
+# 2.25 credit points, whose car has a usage value of 2,000 and a participation of 350. With this
+# payroll the hand-checked net pay is 9,285 without a car and 8,295 with the current car.
 PROFILE = EmployeeProfile(
-    eligibility_group=Group.C,
     base_salary=D(12000),
     pay_components=[],
     pension_rate_percent=D(6),
@@ -206,10 +224,12 @@ PROFILE = EmployeeProfile(
     current_car_participation=D(350),
 )
 # With no car the employee has given it up, so Today pays the maintenance of the occupation: 1,500
-# for "Office administration", which allows the waiver, and nothing for "Field sales".
+# for "Office administration", which allows the waiver, and nothing for "Warehouse". In "Field
+# sales" the car is mandatory, so a Today without a car cannot exist.
 NO_CAR_PROFILE = PROFILE.model_copy(
     update={"has_current_car": False, "current_car_key": None, "current_car_participation": None}
 )
+WAREHOUSE_NO_CAR = NO_CAR_PROFILE.model_copy(update={"occupation": "Warehouse"})
 FIELD_SALES_NO_CAR = NO_CAR_PROFILE.model_copy(update={"occupation": "Field sales"})
 
 
@@ -264,8 +284,26 @@ def test_today_with_a_car_uses_its_record_and_the_current_participation() -> Non
     assert today.missing == ()
 
 
+def test_today_without_a_car_in_a_car_mandatory_occupation_is_pending_on_the_current_car() -> None:
+    comparison = compare(
+        FIELD_SALES_NO_CAR, [EV_CAR, WAIVER], make_inputs(rep_participations={EV_KEY: REP_400})
+    )
+    today = comparison.today
+
+    assert today.status == "pending"
+    assert today.car_key is None
+    assert today.net_pay is None
+    assert today.payroll is None
+    assert [item.field for item in today.missing] == [MissingField.CURRENT_CAR]
+    ev, waiver = comparison.alternatives
+    assert ev.status == "pending"
+    assert missing_fields(ev) == [MissingField.CURRENT_CAR]
+    # The waiver is not allowed in the occupation, so its column is decided all the same.
+    assert waiver.status == "not_eligible"
+
+
 def test_today_without_a_car_in_an_occupation_without_a_waiver_has_every_car_item_at_zero() -> None:
-    today = compare(FIELD_SALES_NO_CAR, [], make_inputs()).today
+    today = compare(WAREHOUSE_NO_CAR, [], make_inputs()).today
 
     assert today.status == "calculated"
     assert today.car_key is None
@@ -540,7 +578,8 @@ def test_a_pending_today_makes_every_alternative_that_is_not_not_eligible_pendin
 
 
 def test_a_missing_field_is_marked_sent_only_for_the_question_that_was_sent() -> None:
-    profile = PROFILE.model_copy(update={"occupation": "Gardener"})
+    # The representative's group keeps the car columns decided while the occupation is unlisted.
+    profile = PROFILE.model_copy(update={"occupation": "Gardener", "eligibility_group": Group.C})
     sent = frozenset(
         {(MissingField.NEW_CAR_PARTICIPATION, SPARE_KEY), (MissingField.OCCUPATION, None)}
     )
@@ -633,15 +672,18 @@ def test_the_family_track_gap_is_split_by_the_configured_shares(
     assert (shown(result.car_cost), shown(result.car_budget)) == (family_cost, budget)
 
 
-def test_a_family_track_car_is_pending_without_the_group_that_sets_the_budget() -> None:
-    profile = PROFILE.model_copy(update={"eligibility_group": None})
+@pytest.mark.parametrize("occupation", [None, "Gardener"], ids=["not-provided", "not-in-the-table"])
+def test_a_family_track_car_is_pending_without_the_occupation_that_sets_the_budget(
+    occupation: str | None,
+) -> None:
+    profile = PROFILE.model_copy(update={"occupation": occupation})
     inputs = make_inputs(rep_participations={FAMILY_KEY: REP_400})
 
     result = column(FAMILY_CAR, profile=profile, inputs=inputs)
 
     assert result.eligibility.status == "eligible"  # the children count alone decides this
     assert result.status == "pending"
-    assert missing_fields(result) == [MissingField.ELIGIBILITY_GROUP]
+    assert missing_fields(result) == [MissingField.OCCUPATION]
     assert shown(result.car_cost) == 6000
     assert shown(result.participation) == 400  # what is known stays on the column
     for unknown in (
@@ -676,20 +718,98 @@ def test_a_family_track_car_lists_the_participation_and_the_share_apart_and_dedu
     assert result.breakdown.participation == Amount(D(-800), -800)
 
 
-def test_a_regular_car_is_pending_without_the_employees_group() -> None:
-    profile = PROFILE.model_copy(update={"eligibility_group": None})
+def test_a_regular_car_is_pending_without_the_occupation_that_gives_the_group() -> None:
+    profile = PROFILE.model_copy(update={"occupation": None})
     inputs = make_inputs(rep_participations={EV_KEY: REP_400})
 
     result = column(EV_CAR, profile=profile, inputs=inputs)
 
     assert result.eligibility.status == "missing"
     assert result.status == "pending"
-    assert missing_fields(result) == [MissingField.ELIGIBILITY_GROUP]
+    assert missing_fields(result) == [MissingField.OCCUPATION]
     assert shown(result.car_cost) == 4300
     assert shown(result.participation) == 400  # what is known stays on the column
     assert result.car_budget is None
     assert result.unused_budget is None
     assert result.net_pay is None
+
+
+def test_the_budget_follows_the_occupation_and_a_group_override_replaces_it() -> None:
+    inputs = make_inputs(rep_participations={EV_KEY: REP_400})
+    by_occupation = column(EV_CAR, inputs=inputs)
+    overridden = column(
+        EV_CAR, profile=PROFILE.model_copy(update={"eligibility_group": Group.D}), inputs=inputs
+    )
+
+    assert shown(by_occupation.car_budget) == 4500  # "Office administration" is group C
+    assert shown(overridden.car_budget) == 5200
+
+
+def with_defaults(**participations: int) -> CarCatalog:
+    """The test catalog with a Default_Participation on the named cars."""
+    names = {"ev": EV_KEY, "spare": SPARE_KEY, "family": FAMILY_KEY, "current": CURRENT_KEY}
+    document = make_catalog().model_dump(mode="json")
+    for name, value in participations.items():
+        car = next(c for c in document["cars"] if c["official_key"] == str(names[name]))
+        car["default_participation"] = value
+    return CarCatalog.model_validate(document)
+
+
+def test_a_new_car_takes_the_catalogs_default_participation_without_a_question() -> None:
+    result = column(EV_CAR, inputs=make_inputs(catalog=with_defaults(ev=300)))
+
+    assert result.status == "calculated"
+    assert result.participation == Amount(D(300), 300)
+    assert result.participation_source == "catalog"
+    assert result.participation_awaiting_rep is False
+    assert result.participation_effective_date is None
+
+
+def test_the_representatives_answer_replaces_the_catalogs_participation() -> None:
+    inputs = make_inputs(catalog=with_defaults(ev=300), rep_participations={EV_KEY: REP_400})
+
+    result = column(EV_CAR, inputs=inputs)
+
+    assert result.participation == Amount(D(400), 400)
+    assert result.participation_source == "representative"
+    assert result.participation_effective_date == date(2026, 1, 1)
+    assert result.participation_awaiting_rep is False
+
+
+def test_an_open_confirmation_question_keeps_the_catalog_amount_and_marks_it_awaited() -> None:
+    asked = frozenset({(MissingField.NEW_CAR_PARTICIPATION, EV_KEY)})
+    inputs = make_inputs(catalog=with_defaults(ev=300, spare=250), rep_questions=asked)
+
+    ev, spare = compare(PROFILE, [EV_CAR, SPARE_CAR], inputs).alternatives
+
+    assert ev.status == "calculated"
+    assert (shown(ev.participation), ev.participation_source) == (300, "catalog")
+    assert ev.participation_awaiting_rep is True
+    assert ev.missing == ()
+    assert spare.participation_awaiting_rep is False
+
+
+def test_a_new_car_without_a_default_participation_is_pending_until_the_rep_answers() -> None:
+    result = column(SPARE_CAR, inputs=make_inputs(catalog=with_defaults(ev=300)))
+
+    assert result.status == "pending"
+    assert missing_fields(result) == [MissingField.NEW_CAR_PARTICIPATION]
+    assert result.participation is None
+    assert result.participation_source is None
+
+
+def test_the_current_car_keeps_the_employees_participation_over_the_catalogs() -> None:
+    result = column(CURRENT_CAR, inputs=make_inputs(catalog=with_defaults(current=999)))
+
+    assert (shown(result.participation), result.participation_source) == (350, "employee")
+
+
+def test_a_family_track_car_takes_the_catalog_participation_and_adds_the_share() -> None:
+    result = column(FAMILY_CAR, inputs=make_inputs(catalog=with_defaults(family=500)))
+
+    assert result.status == "calculated"
+    assert (shown(result.participation), result.participation_source) == (500, "catalog")
+    assert shown(result.employee_gap_share) == 750
 
 
 @pytest.mark.parametrize(

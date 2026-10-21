@@ -2,8 +2,9 @@
 # (sheets "עובדים לדוגמה" and "חישובים" of the workbook of 2026-10-12). The sheet rounds each figure
 # to whole shekels. "insurance" is National Insurance plus health tax.
 #
-# The new car's participation is not listed: the test answers it as the representative with the
-# default participation of the car in the catalog, which is what the sheet used.
+# The new car's participation is not listed: the engine takes the default participation of the car
+# in the catalog, which is what the sheet used. The profile has no group, because the group follows
+# from the occupation; sheet_group is the sheet's value, which the test checks against it.
 #
 # The sheet's tax and insurance of an electric alternative include the grossed-up refund (440 or 473).
 # The engine adds exactly 250 to net pay and does not gross it up, so the test compares those two
@@ -11,8 +12,8 @@
 employees:
   - id: E-001
     question: "אם אעבור מהקורולה קרוס ל-BYD Atto 3 החשמלי - כמה זה ישנה לי בנטו?"
+    sheet_group: C      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: C
       occupation: "מנהל/ת מוצר"
       base_salary: 18500
       pay_components: []
@@ -31,8 +32,8 @@ employees:
 
   - id: E-002
     question: "יש לי 5 ילדים. אם אקח קרניבל במסלול ברוכת ילדים - מה יקרה לנטו?"
+    sheet_group: B      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: B
       occupation: "נציג/ת מכירות שטח"
       base_salary: 9800
       pay_components:
@@ -52,8 +53,8 @@ employees:
 
   - id: E-003
     question: "היום אני מקבלת אחזקת רכב. אם אקח MG4 חשמלי - כמה אפסיד או ארוויח בנטו?"
+    sheet_group: B      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: B
       occupation: "מפתח/ת תוכנה"
       base_salary: 21000
       pay_components: []
@@ -71,8 +72,8 @@ employees:
 
   - id: E-004
     question: "אם אחליף את הטוסון ב-EV3 - מה ההפרש בנטו?"
+    sheet_group: C      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: C
       occupation: "מנהל/ת אזור מכירות"
       base_salary: 16000
       pay_components:
@@ -92,8 +93,8 @@ employees:
 
   - id: E-005
     question: "אם אוותר על הרכב ואקבל אחזקה - כמה אקבל בנטו?"
+    sheet_group: C      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: C
       occupation: "מנהל/ת פיתוח"
       base_salary: 27000
       pay_components: []
@@ -111,8 +112,8 @@ employees:
 
   - id: E-006
     question: "אם אעבור מהאוקטביה לטסלה מודל 3 - מה יקרה לנטו?"
+    sheet_group: D      # the sheet's group; the advisor takes it from the occupation
     profile:
-      eligibility_group: D
       occupation: "מנהל/ת מחלקה"
       base_salary: 32000
       pay_components:

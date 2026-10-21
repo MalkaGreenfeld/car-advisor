@@ -21,6 +21,8 @@ function question(id: string, overrides: Partial<RepQuestionView> = {}): RepQues
     employee: { display_name: 'דנה לוי', number: 4821 },
     eligibility_group: 'B',
     car: { display_name: 'Kia EV6', car_key: '2026-2026-1-01229-00004' },
+    suggested_amount: null,
+    choices: null,
     status: 'open',
     answer: null,
     ...overrides,
@@ -30,7 +32,7 @@ function question(id: string, overrides: Partial<RepQuestionView> = {}): RepQues
 function answered(id: string, overrides: Partial<RepQuestionView> = {}): RepQuestionView {
   return question(id, {
     status: 'answered',
-    answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null },
+    answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null, choice: null },
     ...overrides,
   });
 }

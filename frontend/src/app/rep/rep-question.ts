@@ -44,6 +44,12 @@ export class RepQuestion {
       amount: answer.amount === null ? null : formatShekels(Number(answer.amount)),
       effectiveDate: answer.effective_date === null ? null : formatDate(answer.effective_date),
       note: answer.note,
+      // A choice is shown by its label, such as the Hebrew letter of a group.
+      choice:
+        answer.choice === null
+          ? null
+          : (this.question().choices?.find((item) => item.value === answer.choice)?.label ??
+            answer.choice),
       text: answer.text,
     };
   });

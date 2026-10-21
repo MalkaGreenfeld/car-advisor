@@ -205,7 +205,7 @@ def test_running_the_migrations_again_is_a_no_op(engine: Engine) -> None:
     }
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
-        assert context.get_current_revision() == "0001"
+        assert context.get_current_revision() == "0002"
         # Only SQL Server shows the DATETIME2 variant, which SQLite cannot compare.
         assert compare_metadata(context, Base.metadata) == []
     with sessions() as session:

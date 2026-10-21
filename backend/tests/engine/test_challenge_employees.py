@@ -1,6 +1,5 @@
 """The six sample employees of the challenge, against the reference figures of its sheet."""
 
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -12,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from car_advisor.dataset.lookup import CarLookup
 from car_advisor.engine.comparison import AlternativeResult, Comparison, ComparisonInputs, compare
+from car_advisor.engine.eligibility import employee_group
 from car_advisor.engine.money import display
 from car_advisor.engine.payroll import PayrollBreakdown, PayrollInput, PayrollOk, calculate_net_pay
 from car_advisor.engine.types import (
@@ -19,15 +19,13 @@ from car_advisor.engine.types import (
     CarAlternative,
     CarKey,
     EmployeeProfile,
+    Group,
     PayComponent,
-    RepParticipation,
 )
 from car_advisor.rules.loader import AppConfig, load_config
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "challenge" / "employees.yaml"
 CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
-# The representative's answer only needs a date; the sheet's participations have none.
-ANSWERED_ON = date(2026, 1, 1)
 
 
 class Reference(BaseModel, extra="forbid"):
@@ -40,6 +38,7 @@ class Reference(BaseModel, extra="forbid"):
 class ChallengeEmployee(BaseModel, extra="forbid"):
     id: str
     question: str
+    sheet_group: Group
     profile: EmployeeProfile
     alternative: Alternative
     today: Reference
@@ -79,26 +78,18 @@ def lookup(real_sessions: sessionmaker[Session]) -> CarLookup:
 
 
 def comparison_of(employee: ChallengeEmployee, config: AppConfig, lookup: CarLookup) -> Comparison:
-    """Run the shipped files on the real dataset, the catalog's participation being the answer."""
+    """Run the shipped files on the real dataset, with no question to the representative."""
     keys: list[CarKey] = []
     if employee.profile.current_car_key is not None:
         keys.append(employee.profile.current_car_key)
-    answers: dict[CarKey, RepParticipation] = {}
     if isinstance(employee.alternative, CarAlternative):
-        key = employee.alternative.car_key
-        keys.append(key)
-        car = config.catalog.find(key)
-        assert car is not None
-        assert car.default_participation is not None
-        answers[key] = RepParticipation(
-            amount=car.default_participation, effective_date=ANSWERED_ON
-        )
+        keys.append(employee.alternative.car_key)
     inputs = ComparisonInputs(
         rules=config.rules,
         catalog=config.catalog,
         occupations=config.occupations,
         records=lookup.get_many(keys),
-        rep_participations=answers,
+        rep_participations={},
         rep_questions=frozenset(),
     )
     return compare(employee.profile, [employee.alternative], inputs)
@@ -143,6 +134,31 @@ def insurance_of(breakdown: PayrollBreakdown) -> int:
 
 def test_the_sheet_has_six_employees() -> None:
     assert [employee.id for employee in EMPLOYEES] == [f"E-00{number}" for number in range(1, 7)]
+
+
+@pytest.mark.parametrize("employee", EMPLOYEES, ids=by_id)
+def test_the_group_of_the_occupation_is_the_group_of_the_sheet(
+    employee: ChallengeEmployee, config: AppConfig
+) -> None:
+    assert employee.profile.eligibility_group is None
+    assert employee_group(employee.profile, config.occupations) == employee.sheet_group
+
+
+@pytest.mark.parametrize(
+    "employee", [item for item in EMPLOYEES if item.alternative.kind == "car"], ids=by_id
+)
+def test_a_new_car_takes_the_catalogs_participation(
+    employee: ChallengeEmployee, config: AppConfig, lookup: CarLookup
+) -> None:
+    [column] = comparison_of(employee, config, lookup).alternatives
+    assert isinstance(employee.alternative, CarAlternative)
+    car = config.catalog.find(employee.alternative.car_key)
+
+    assert car is not None
+    assert column.participation is not None
+    assert column.participation.exact == car.default_participation
+    assert column.participation_source == "catalog"
+    assert column.participation_awaiting_rep is False
 
 
 @pytest.mark.parametrize("employee", EMPLOYEES, ids=by_id)

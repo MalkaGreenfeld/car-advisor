@@ -1,11 +1,11 @@
-import { EmployeeProfile, Group } from '../../shared/api-models';
+import { EditableProfileField, EmployeeProfile } from '../../shared/api-models';
 
-export type FieldKind = 'group' | 'yes_no' | 'amount' | 'percent' | 'points' | 'count' | 'text';
+export type FieldKind = 'yes_no' | 'amount' | 'percent' | 'points' | 'count' | 'text';
 
 // The profile fields that the panel edits as one input each. The kind fixes what the input holds
-// and what the server accepts for it (backend/src/car_advisor/engine/types.py).
+// and what the server accepts for it (backend/src/car_advisor/engine/types.py). The group is not one:
+// it follows from the occupation, and the panel only shows it.
 export const FIELD_KINDS = {
-  eligibility_group: 'group',
   base_salary: 'amount',
   pension_rate_percent: 'percent',
   study_fund_rate_percent: 'percent',
@@ -15,7 +15,7 @@ export const FIELD_KINDS = {
   occupation: 'text',
   children_under_23: 'count',
   display_name: 'text',
-} as const satisfies Partial<Record<keyof EmployeeProfile, FieldKind>>;
+} as const satisfies Partial<Record<EditableProfileField, FieldKind>>;
 
 export type DetailsFieldName = keyof typeof FIELD_KINDS;
 
@@ -23,9 +23,7 @@ export type DetailsFieldName = keyof typeof FIELD_KINDS;
 export type DetailsTexts = Record<DetailsFieldName, string>;
 
 // A profile value of one of the fields above, as the API carries it.
-export type FieldValue = Group | boolean | number | string | null;
-
-export const GROUPS: readonly Group[] = ['A', 'B', 'C', 'D'];
+export type FieldValue = boolean | number | string | null;
 
 export const FIELD_NAMES = Object.keys(FIELD_KINDS) as DetailsFieldName[];
 
@@ -44,8 +42,6 @@ export function parseValue(kind: FieldKind, text: string): FieldValue | undefine
     return null;
   }
   switch (kind) {
-    case 'group':
-      return GROUPS.find((group) => group === trimmed);
     case 'yes_no':
       return trimmed === 'yes' || trimmed === 'no' ? trimmed === 'yes' : undefined;
     case 'amount':

@@ -23,6 +23,7 @@ from car_advisor.api.schemas import (
     ErrorBody,
     ErrorCode,
     MessageRequest,
+    OccupationsResponse,
     ProfileChangesRequest,
 )
 from car_advisor.api.services import Services, get_services
@@ -113,13 +114,20 @@ def replace_alternative(
 
 @router.get("/conversations/{conversation_id}/catalog")
 def get_catalog(conversation_id: ConversationId, services: ServicesDep) -> CatalogResponse:
-    group = services.conversations.state(conversation_id).profile.eligibility_group
+    group = services.conversations.state(conversation_id).employee_group.group
     if group is None:
-        # No cars from any group in its place (Req 4.17).
-        return CatalogResponse(cars=(), missing_field="eligibility_group")
+        # No cars from any group in its place; the group follows from the occupation (Req 4.17).
+        return CatalogResponse(cars=(), missing_field="occupation")
     config = services.config
     cars = config.catalog.cars_for(group, config.rules.groups.order)
     return CatalogResponse(cars=tuple(CatalogCarView.from_car(car) for car in cars))
+
+
+@router.get("/occupations")
+def get_occupations(services: ServicesDep) -> OccupationsResponse:
+    # The table's names in its order, for the suggestions of the occupation field (Req 11.19).
+    names = (item.name.strip() for item in services.config.occupations.occupations)
+    return OccupationsResponse(names=tuple(names))
 
 
 def _registration_year(value: str | None) -> int | None:

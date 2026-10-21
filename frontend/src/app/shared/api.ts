@@ -15,6 +15,7 @@ import {
   FieldError,
   Health,
   MessageRequest,
+  OccupationsResponse,
   ProfileChanges,
   ProfileChangesRequest,
   RepAnswerRequest,
@@ -124,6 +125,10 @@ export class ApiClient {
         body,
       ),
     );
+  }
+
+  getOccupations(): Promise<OccupationsResponse> {
+    return this.request(this.http.get<OccupationsResponse>(`${API_BASE}/occupations`));
   }
 
   getCatalog(conversationId: string): Promise<CatalogResponse> {

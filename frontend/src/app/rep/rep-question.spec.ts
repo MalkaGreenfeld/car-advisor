@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ApiClient } from '../shared/api';
 import { RepQuestionView } from '../shared/api-models';
-import { createAnswerForm } from './answer-values';
+import { answerKindOf, createAnswerForm, initialValuesOf } from './answer-values';
 import { RepQuestion } from './rep-question';
 import { repCopy } from './rep.copy';
 
@@ -20,6 +20,8 @@ function question(overrides: Partial<RepQuestionView> = {}): RepQuestionView {
     employee: { display_name: 'דנה לוי', number: 4821 },
     eligibility_group: 'B',
     car: { display_name: 'Kia EV6', car_key: '2026-2026-1-01229-00004' },
+    suggested_amount: null,
+    choices: null,
     status: 'open',
     answer: null,
     ...overrides,
@@ -37,8 +39,12 @@ describe('RepQuestion', () => {
     fixture = TestBed.createComponent(RepQuestion);
     fixture.componentRef.setInput('question', view);
     if (view.status === 'open') {
-      const kind = view.question_type === 'participation' ? 'participation' : 'text';
-      fixture.componentRef.setInput('formState', createAnswerForm(kind, TestBed.inject(Injector)));
+      const state = createAnswerForm(
+        answerKindOf(view),
+        TestBed.inject(Injector),
+        initialValuesOf(view),
+      );
+      fixture.componentRef.setInput('formState', state);
     }
     await fixture.whenStable();
   }
@@ -86,11 +92,28 @@ describe('RepQuestion', () => {
     });
 
     it('names the type of a question that is not about a participation', async () => {
-      await open(question({ question_type: 'occupation_waiver', car: null }));
+      await open(question({ question_type: 'other', car: null }));
 
       const [type] = facts();
-      expect(type).toEqual([copy.labels.type, copy.types.occupation_waiver]);
+      expect(type).toEqual([copy.labels.type, copy.types.other]);
       expect(host().querySelector('textarea')).not.toBeNull();
+    });
+
+    it('offers the table entries for an occupation question', async () => {
+      const choices = [
+        { value: 'מנהל/ת מוצר', label: 'מנהל/ת מוצר' },
+        { value: 'מפתח/ת תוכנה', label: 'מפתח/ת תוכנה' },
+      ];
+      await open(question({ question_type: 'occupation', car: null, choices }));
+
+      const [type] = facts();
+      expect(type).toEqual([copy.labels.type, copy.types.occupation]);
+      const select = host().querySelector('select');
+      expect(Array.from(select?.options ?? [], (option) => option.value)).toEqual([
+        '',
+        'מנהל/ת מוצר',
+        'מפתח/ת תוכנה',
+      ]);
     });
 
     it('leaves out the car, and the group when the employee has none', async () => {
@@ -121,6 +144,7 @@ describe('RepQuestion', () => {
             effective_date: '2026-01-01',
             note: 'Starts in January',
             text: null,
+            choice: null,
           },
         }),
       );
@@ -147,6 +171,7 @@ describe('RepQuestion', () => {
             effective_date: null,
             note: null,
             text: 'The occupation allows it.',
+            choice: null,
           },
         }),
       );
@@ -156,11 +181,35 @@ describe('RepQuestion', () => {
       expect(host().querySelector('form')).toBeNull();
     });
 
+    it('shows a choice by its label', async () => {
+      await open(
+        question({
+          question_type: 'eligibility_group',
+          car: null,
+          choices: [
+            { value: 'C', label: 'ג' },
+            { value: 'D', label: 'ד' },
+          ],
+          status: 'answered',
+          answer: { amount: null, effective_date: null, note: null, text: null, choice: 'D' },
+        }),
+      );
+
+      const answer = host().querySelector<HTMLElement>('.stored-answer');
+      expect(facts(answer ?? host())).toEqual([[stored.choice, 'ד']]);
+    });
+
     it('shows a participation without a note without the note row', async () => {
       await open(
         question({
           status: 'answered',
-          answer: { amount: '0', effective_date: '2026-03-05', note: null, text: null },
+          answer: {
+            amount: '0',
+            effective_date: '2026-03-05',
+            note: null,
+            text: null,
+            choice: null,
+          },
         }),
       );
 

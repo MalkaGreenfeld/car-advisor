@@ -271,7 +271,7 @@ def test_the_stored_history_holds_no_instructions_and_a_second_turn_replays_it(
 ) -> None:
     script = Script(
         [
-            call("update_profile", changes={"eligibility_group": "C", "base_salary": 14200}),
+            call("update_profile", changes={"occupation": "מנהל/ת מוצר", "base_salary": 14200}),
             call("compare_alternatives", alternatives=[{"kind": "waiver"}]),
             say(REPLY),
             say(SECOND_REPLY),

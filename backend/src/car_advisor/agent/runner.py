@@ -283,6 +283,14 @@ def answer_note(answered: Answered) -> str:
     label = copy_he.MISSING_FIELD_LABELS[field.missing_field]
     stored = answered.question.answer
     text = None if stored is None else stored.text
+    if stored is not None and stored.choice is not None:
+        # The choice is already stored in the profile, as the occupation or the group (Req 10.17).
+        chosen = json.dumps(stored.choice, ensure_ascii=False)
+        return (
+            f"Note from the application, not from the employee: the transport representative "
+            f"answered the question about {label} ({field.value}) with the choice {chosen}. "
+            "The stored profile and the comparison already follow it."
+        )
     opening = (
         "Note from the application, not from the employee: the transport representative "
         f"answered the question about {label} ({field.value})"

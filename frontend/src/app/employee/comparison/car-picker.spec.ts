@@ -33,7 +33,9 @@ function stateOf(
   id = 'c1',
 ): ConversationState {
   return conversationState(id, {
-    profile: { ...EMPTY_PROFILE, eligibility_group: group },
+    // The group in use, as the occupation gives it.
+    profile: EMPTY_PROFILE,
+    employee_group: { group, source: group === null ? null : 'occupation' },
     comparison: { today: todayView(), alternatives },
   });
 }
@@ -258,7 +260,7 @@ describe('CarPicker', () => {
   });
 
   describe('when the list cannot be offered', () => {
-    it('is disabled with a message while no group is stored, and loads nothing (Req 11.18)', async () => {
+    it('is disabled with a message while the group is unknown, and loads nothing (Req 11.18)', async () => {
       await open(stateOf(null));
       await settle();
 
@@ -270,7 +272,7 @@ describe('CarPicker', () => {
     });
 
     it('is disabled with the same message when the server names the group as missing', async () => {
-      api.getCatalog.mockResolvedValue({ cars: [], missing_field: 'eligibility_group' });
+      api.getCatalog.mockResolvedValue({ cars: [], missing_field: 'occupation' });
       await open(stateOf('C'));
 
       await until(() => expect(notes()).toEqual([copy.needsGroup]));

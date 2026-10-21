@@ -13,6 +13,7 @@ from car_advisor.engine.types import (
     CarAlternative,
     EmployeeProfile,
     Group,
+    MissingField,
     PayComponent,
     Powertrain,
     RepParticipation,
@@ -55,15 +56,37 @@ def make_catalog(*, family_cost: int = 6000) -> CarCatalog:
     )
 
 
+def occupation(
+    name: str, group: Group, *, mandatory: bool = False, maintenance: int = 0
+) -> dict[str, object]:
+    return {
+        "name": name,
+        "group": group,
+        "car_mandatory": mandatory,
+        "car_waiver_allowed": not mandatory,
+        "car_maintenance": maintenance,
+    }
+
+
 CATALOG = make_catalog()
 OCCUPATIONS = OccupationsTable.model_validate(
     {
         "occupations": [
-            {"name": "Finance manager", "car_waiver_allowed": True, "car_maintenance": 2000},
-            {"name": "Sales representative", "car_waiver_allowed": False, "car_maintenance": 0},
+            occupation("Purchasing coordinator", Group.A, maintenance=1200),
+            occupation("Finance manager", Group.B, maintenance=2000),
+            occupation("Sales representative", Group.B, mandatory=True),
+            occupation("Product manager", Group.C, maintenance=2000),
+            occupation("Department manager", Group.D, maintenance=2600),
         ]
     }
 )
+# The employee's group comes from the occupation, so each example names one of that group.
+OCCUPATION_OF = {
+    Group.A: "Purchasing coordinator",
+    Group.B: "Finance manager",
+    Group.C: "Product manager",
+    Group.D: "Department manager",
+}
 # The two group D cars have the same record, so only their cost sets them apart.
 RECORDS = {
     CURRENT_KEY: make_record(CURRENT_KEY, Powertrain.CONVENTIONAL, 2400),
@@ -101,14 +124,15 @@ def employee(
     group: Group, *, occupation: str | None = None, children_under_23: int | None = None
 ) -> EmployeeProfile:
     # The pay data is that of the employee in the challenge script, whatever the group.
+    chosen = OCCUPATION_OF[group] if occupation is None else occupation
+    assert OCCUPATIONS.find(chosen) is not None
     return EmployeeProfile(
-        eligibility_group=group,
         base_salary=D(14200),
         pay_components=[PayComponent(kind="commission", label="Commissions", amount=D(1000))],
         pension_rate_percent=D(6),
         study_fund_rate_percent=D("2.5"),
         credit_points=D("2.25"),
-        occupation=occupation,
+        occupation=chosen,
         children_under_23=children_under_23,
         has_current_car=True,
         current_car_key=CURRENT_KEY,
@@ -246,3 +270,37 @@ def test_giving_up_the_car_is_refused_for_an_occupation_that_forbids_it(
     assert result.eligibility.status == "not_eligible"
     assert result.eligibility.reason == copy_he.waiver_reason("Sales representative", allowed=False)
     assert result.car_maintenance is None
+
+
+def test_the_group_follows_from_the_occupation(inputs: ComparisonInputs) -> None:
+    group_d = column(GROUP_D_CAR, employee(Group.D), inputs)
+    group_c = column(GROUP_D_CAR, employee(Group.C), inputs)
+
+    assert (group_d.eligibility.status, shown(group_d.car_budget)) == ("eligible", 5200)
+    assert group_c.eligibility.status == "not_eligible"
+
+
+def test_a_new_car_without_a_rep_answer_takes_the_catalogs_default_participation(
+    inputs: ComparisonInputs,
+) -> None:
+    document = CATALOG.model_dump(mode="json")
+    document["cars"][0]["default_participation"] = 250
+    unanswered = replace(inputs, catalog=CarCatalog.model_validate(document), rep_participations={})
+
+    result = column(GROUP_C_CAR, employee(Group.C), unanswered)
+
+    assert result.status == "calculated"
+    assert (shown(result.participation), result.participation_source) == (250, "catalog")
+
+
+def test_no_car_in_an_occupation_with_a_mandatory_car_leaves_today_waiting_for_the_car(
+    inputs: ComparisonInputs,
+) -> None:
+    profile = employee(Group.B, occupation="Sales representative").model_copy(
+        update={"has_current_car": False, "current_car_key": None}
+    )
+
+    today = compare(profile, [GROUP_C_CAR], inputs).today
+
+    assert today.status == "pending"
+    assert [item.field for item in today.missing] == [MissingField.CURRENT_CAR]

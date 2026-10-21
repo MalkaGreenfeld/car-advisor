@@ -13,12 +13,19 @@ import { FormField } from '@angular/forms/signals';
 
 import { ApiClient, ApiError } from '../shared/api';
 import { RepAnswerRequest, RepQuestionView } from '../shared/api-models';
+import { formatShekels } from '../shared/format';
 import { AnswerFieldName, AnswerFormState, AnswerValues } from './answer-values';
 import { repCopy } from './rep.copy';
 
 const copy = repCopy.answer;
 
-const FIELD_NAMES: readonly AnswerFieldName[] = ['amount', 'effective_date', 'note', 'text'];
+const FIELD_NAMES: readonly AnswerFieldName[] = [
+  'amount',
+  'effective_date',
+  'note',
+  'choice',
+  'text',
+];
 
 function isAnswerField(name: string): name is AnswerFieldName {
   return (FIELD_NAMES as readonly string[]).includes(name);
@@ -56,6 +63,20 @@ export class AnswerForm {
 
   private readonly notice = signal<Notice | null>(null);
   private readonly rejection = signal<Rejection | null>(null);
+
+  // The catalog's amount of the car, shown next to the amount field.
+  protected readonly suggested = computed(() => {
+    const amount = this.question().suggested_amount;
+    return amount === null
+      ? null
+      : copy.suggested.replace('{amount}', formatShekels(Number(amount)));
+  });
+  protected readonly choices = computed(() => this.question().choices ?? []);
+  protected readonly choiceLabel = computed(() =>
+    this.question().question_type === 'eligibility_group'
+      ? copy.choice.eligibility_group
+      : copy.choice.occupation,
+  );
 
   protected readonly noticeText = computed(() => {
     switch (this.notice()) {
@@ -130,8 +151,12 @@ export class AnswerForm {
   }
 
   private requestOf(values: AnswerValues): RepAnswerRequest {
-    if (this.state().kind === 'text') {
+    const kind = this.state().kind;
+    if (kind === 'text') {
       return { text: values.text.trim() };
+    }
+    if (kind === 'choice') {
+      return { choice: values.choice };
     }
     const note = values.note.trim();
     return {

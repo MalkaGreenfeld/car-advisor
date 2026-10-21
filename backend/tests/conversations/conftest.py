@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from car_advisor.conversations.service import ConversationService
 from car_advisor.dataset.lookup import CarLookup
+from car_advisor.engine.types import CarKey
 from car_advisor.rules.loader import AppConfig, load_config
 
 CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
@@ -17,6 +19,15 @@ def app_config() -> AppConfig:
         CONFIG_DIR / "car_catalog.yaml",
         CONFIG_DIR / "occupations.yaml",
     )
+
+
+def without_default_participation(config: AppConfig, *keys: CarKey) -> AppConfig:
+    """The config without a Default_Participation for the given cars, which then wait for one."""
+    cars = [
+        car.model_copy(update={"default_participation": None}) if car.official_key in keys else car
+        for car in config.catalog.cars
+    ]
+    return replace(config, catalog=config.catalog.model_copy(update={"cars": cars}))
 
 
 # The service works on the per-test SQLite database, which holds no dataset records.

@@ -282,6 +282,36 @@ def test_a_valid_catalog_passes_without_the_marker() -> None:
     assert catalog.cars[0].monthly_cost == Decimal(3000)
     assert catalog.cars[0].family_track is False
     assert catalog.cars[0].default_participation is None
+    assert catalog.cars[0].usage_value is None
+
+
+def test_a_catalog_car_keeps_its_default_participation_and_usage_value() -> None:
+    document = changed(CATALOG, "cars.0.default_participation", 250)
+    document = changed(document, "cars.0.usage_value", 2690)
+
+    first = CarCatalog.model_validate(document).cars[0]
+
+    assert (first.default_participation, first.usage_value) == (Decimal(250), 2690)
+
+
+def test_an_occupation_keeps_its_group_and_car_mandatory_flag() -> None:
+    table = OccupationsTable.model_validate(OCCUPATIONS)
+
+    found = table.find("Field sales")
+
+    assert found is not None
+    assert (found.group, found.car_mandatory, found.car_waiver_allowed) == (Group.B, True, False)
+
+
+def test_a_mandatory_car_with_an_allowed_waiver_is_rejected_with_both_names() -> None:
+    document = changed(OCCUPATIONS, "occupations.0.car_mandatory", True)
+
+    with pytest.raises(ValidationError) as caught:
+        OccupationsTable.model_validate(document)
+
+    [error] = caught.value.errors()
+    assert "car_mandatory" in error["msg"]
+    assert "car_waiver_allowed" in error["msg"]
 
 
 @pytest.mark.parametrize(
@@ -328,6 +358,8 @@ def test_find_returns_the_car_with_the_key() -> None:
             "cars.0.default_participation",
             id="negative-participation",
         ),
+        pytest.param("cars.0.usage_value", -1, "cars.0.usage_value", id="negative-usage-value"),
+        pytest.param("cars.0.usage_value", 2690.5, "cars.0.usage_value", id="fractional-usage"),
         pytest.param("cars.2.group", "E", "cars.2.group", id="unknown-group"),
         pytest.param("cars.1.display_name", DELETE, "cars.1.display_name", id="missing-name"),
         pytest.param("cars.1.display_name", " ", "cars.1.display_name", id="blank-name"),
@@ -381,8 +413,20 @@ def test_catalog_yaml_rejects_an_unquoted_code() -> None:
 OCCUPATIONS: dict[str, Any] = {
     "mock_data": "MOCK DATA",
     "occupations": [
-        {"name": "Office administration", "car_waiver_allowed": True, "car_maintenance": 1500},
-        {"name": " Field sales ", "car_waiver_allowed": False, "car_maintenance": 0},
+        {
+            "name": "Office administration",
+            "group": "B",
+            "car_mandatory": False,
+            "car_waiver_allowed": True,
+            "car_maintenance": 1500,
+        },
+        {
+            "name": " Field sales ",
+            "group": "B",
+            "car_mandatory": True,
+            "car_waiver_allowed": False,
+            "car_maintenance": 0,
+        },
     ],
 }
 
@@ -411,8 +455,20 @@ def test_find_returns_none_for_an_unlisted_occupation(name: str) -> None:
 
 SLASH_OCCUPATIONS: dict[str, Any] = {
     "occupations": [
-        {"name": "מפתח/ת תוכנה", "car_waiver_allowed": True, "car_maintenance": 1500},
-        {"name": "אנליסט/ית נתונים", "car_waiver_allowed": True, "car_maintenance": 1500},
+        {
+            "name": "מפתח/ת תוכנה",
+            "group": "B",
+            "car_mandatory": False,
+            "car_waiver_allowed": True,
+            "car_maintenance": 1500,
+        },
+        {
+            "name": "אנליסט/ית נתונים",
+            "group": "B",
+            "car_mandatory": False,
+            "car_waiver_allowed": True,
+            "car_maintenance": 1500,
+        },
     ]
 }
 
@@ -457,6 +513,17 @@ def test_find_does_not_match_a_part_or_another_word_of_a_slash_name(typed: str) 
             DELETE,
             "occupations.1.car_waiver_allowed",
             id="missing-waiver",
+        ),
+        pytest.param("occupations.0.group", "E", "occupations.0.group", id="unknown-group"),
+        pytest.param("occupations.1.group", DELETE, "occupations.1.group", id="missing-group"),
+        pytest.param(
+            "occupations.1.car_mandatory",
+            DELETE,
+            "occupations.1.car_mandatory",
+            id="missing-car-mandatory",
+        ),
+        pytest.param(
+            "occupations.0.car_mandatory", True, "occupations.0", id="mandatory-with-a-waiver"
         ),
         pytest.param("occupations.0.name", "", "occupations.0.name", id="empty-name"),
         pytest.param("occupations.0.notes", "x", "occupations.0.notes", id="unknown-key"),

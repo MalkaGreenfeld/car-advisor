@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
-from car_advisor.dataset.lookup import CarLookup, CatalogMismatch, check_catalog
+from car_advisor.dataset.lookup import (
+    CarLookup,
+    CatalogMismatch,
+    UsageValueMismatch,
+    check_catalog,
+)
 from car_advisor.engine.config import CarCatalog, CatalogCar
 from car_advisor.engine.types import CarKey, Group
 from car_advisor.rules.loader import load_config
@@ -39,7 +44,39 @@ def test_the_mock_catalog_passes_against_the_real_dataset(lookup: CarLookup) -> 
         CONFIG_DIR / "occupations.yaml",
     )
 
-    assert check_catalog(lookup, config.catalog) is None
+    # Every usage value of the shipped catalog equals its record, so there is no warning.
+    assert check_catalog(lookup, config.catalog) == []
+
+
+def test_a_differing_usage_value_is_returned_with_both_amounts_and_does_not_raise(
+    lookup: CarLookup,
+) -> None:
+    record = lookup.get_many([MODEL_3.official_key])[MODEL_3.official_key]
+    wrong = MODEL_3.model_copy(update={"usage_value": record.usage_value + 100})
+    right = catalog_car("Same Model 3", "2026-2023-1-01229-00177").model_copy(
+        update={"usage_value": record.usage_value, "official_key": MODEL_3.official_key}
+    )
+    unchecked = MODEL_3.model_copy(update={"display_name": "No usage value"})
+
+    warnings = check_catalog(lookup, CarCatalog.model_construct(cars=[wrong, right, unchecked]))
+
+    assert warnings == [
+        UsageValueMismatch(
+            display_name="Tesla Model 3",
+            car_key=MODEL_3.official_key,
+            catalog_usage_value=record.usage_value + 100,
+            dataset_usage_value=record.usage_value,
+        )
+    ]
+
+
+def test_a_missing_car_still_stops_the_check_before_any_usage_value(lookup: CarLookup) -> None:
+    wrong = MODEL_3.model_copy(update={"usage_value": 1})
+
+    with pytest.raises(CatalogMismatch) as caught:
+        check_catalog(lookup, CarCatalog(cars=[wrong, UNKNOWN_MODEL_CODE]))
+
+    assert caught.value.missing == [UNKNOWN_MODEL_CODE]
 
 
 def test_a_catalog_with_two_unknown_keys_names_both_cars(lookup: CarLookup) -> None:

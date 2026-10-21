@@ -30,6 +30,7 @@ DATABASE_DOWN = {
     "dataset_loaded": False,
     "tax_year": 2026,
     "record_count": 0,
+    "catalog_warnings": [],
 }
 
 
@@ -70,7 +71,13 @@ def test_a_loaded_dataset_gives_200_with_the_record_count_and_needs_no_api_key(
 
     assert (response.status_code, response.json()) == (
         200,
-        {"database_reachable": True, "dataset_loaded": True, "tax_year": 2026, "record_count": 2},
+        {
+            "database_reachable": True,
+            "dataset_loaded": True,
+            "tax_year": 2026,
+            "record_count": 2,
+            "catalog_warnings": [],
+        },
     )
 
 
@@ -93,7 +100,13 @@ def test_a_reachable_database_without_the_dataset_gives_503(
 
     assert (response.status_code, response.json()) == (
         503,
-        {"database_reachable": True, "dataset_loaded": False, "tax_year": 2026, "record_count": 0},
+        {
+            "database_reachable": True,
+            "dataset_loaded": False,
+            "tax_year": 2026,
+            "record_count": 0,
+            "catalog_warnings": [],
+        },
     )
 
 
@@ -146,3 +159,27 @@ def test_the_health_route_resolves_its_dependencies_without_the_thread_pool() ->
 
     assert route.dependant.dependencies
     assert all(iscoroutinefunction(d.call) for d in route.dependant.dependencies)
+
+
+def test_a_catalog_usage_value_that_differs_is_listed_and_the_status_stays_200(
+    app_settings: Settings, sqlite_startup: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    catalog = app_settings.catalog_path
+    catalog.write_text(catalog.read_text() + "    usage_value: 1000\n")
+
+    with TestClient(create_app(app_settings)) as started:
+        response = started.get(HEALTH)
+
+    assert response.status_code == 200
+    assert response.json()["catalog_warnings"] == [
+        {
+            "display_name": "Tesla Model 3",
+            "car_key": "2026-2020-1-01229-00001",
+            "catalog_usage_value": 1000,
+            "dataset_usage_value": 7990,
+        }
+    ]
+    [line] = [line for line in logged(caplog) if line["event"] == "catalog_usage_value_mismatch"]
+    assert line["level"] == "WARNING"
+    assert (line["display_name"], line["car_key"]) == ("Tesla Model 3", "2026-2020-1-01229-00001")
+    assert (line["catalog_usage_value"], line["dataset_usage_value"]) == (1000, 7990)

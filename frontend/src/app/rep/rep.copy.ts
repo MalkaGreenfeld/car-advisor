@@ -16,7 +16,8 @@ export const repCopy = {
   question: {
     types: {
       participation: 'השתתפות ברכב חדש',
-      occupation_waiver: 'ויתור על רכב לפי עיסוק',
+      occupation: 'עיסוק שאינו בטבלה',
+      eligibility_group: 'קבוצת זכאות',
       other: 'שאלה כללית',
     },
     statuses: {
@@ -39,8 +40,16 @@ export const repCopy = {
       label: 'סכום ההשתתפות החודשית (₪)',
       hint: 'סכום של 0 ומעלה, עד שתי ספרות אחרי הנקודה.',
     },
+    // Next to the amount field of a catalog car, which starts with that amount (Req 12.6).
+    suggested: 'בקטלוג: {amount}',
     effectiveDate: { label: 'בתוקף מתאריך' },
     note: { label: 'הערה (לא חובה)' },
+    choice: {
+      // By the question type: the entry of the table, or the group.
+      occupation: 'השורה המתאימה בטבלת העיסוקים',
+      eligibility_group: 'קבוצת הזכאות של העובד/ת',
+      none: 'בחירה',
+    },
     text: { label: 'תשובה' },
     submit: 'שליחת תשובה',
     sending: 'שולח את התשובה…',
@@ -52,12 +61,14 @@ export const repCopy = {
       effective_date: 'יש להזין תאריך תחילה תקף.',
       note: 'ההערה ארוכה מדי, עד 500 תווים.',
       text: 'יש להזין תשובה בטקסט, עד 2,000 תווים.',
+      choice: 'יש לבחור אחת מהאפשרויות ברשימה.',
     },
     stored: {
       heading: 'התשובה שנשמרה',
       amount: 'סכום',
       effectiveDate: 'בתוקף מתאריך',
       note: 'הערה',
+      choice: 'הבחירה',
       text: 'תשובה',
     },
   },

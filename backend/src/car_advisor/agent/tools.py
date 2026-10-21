@@ -37,13 +37,13 @@ from car_advisor.dataset.lookup import (
 )
 from car_advisor.engine import copy_he, eligibility
 from car_advisor.engine.config import CatalogCar
+from car_advisor.engine.money import display
 from car_advisor.engine.types import (
     Alternative,
     CarAlternative,
     CarKey,
     CarRecord,
     CurrentCarDescription,
-    Group,
     MissingField,
     Money,
     PayComponent,
@@ -170,11 +170,14 @@ class CatalogCarItem(_Result):
     # From the dataset record and not from the name: a car is electric by its Powertrain.
     powertrain: Powertrain
     powertrain_label: str
+    # The participation that the comparison uses until the representative gives another, in whole
+    # shekels; None when the catalog has none, and then the representative is asked (Req 6.3).
+    catalog_participation: int | None
 
 
 class CatalogToolResult(_Result):
     cars: list[CatalogCarItem]
-    # The eligibility group while none is stored, and then there are no cars (Req 4.17).
+    # The occupation while the group is unknown, and then there are no cars (Req 4.17).
     missing: FieldLabel | None
 
 
@@ -250,8 +253,6 @@ class ProfileChanges(BaseModel, extra="forbid", use_attribute_docstrings=True):
 
     display_name: SkipValidation[str | None] = None
     """The employee's name, only if they gave it."""
-    eligibility_group: SkipValidation[Group | None] = None
-    """Eligibility group: A, B, C or D. The Hebrew letters alef, bet, gimel and dalet are A to D."""
     base_salary: SkipValidation[Money | None] = None
     """Monthly base salary in shekels."""
     pay_components: SkipValidation[list[PayComponent] | None] = None
@@ -431,15 +432,16 @@ def lookup_car(
 def list_catalog_cars(ctx: RunContext[AdvisorDeps]) -> CatalogToolResult:
     """List the cars of the Car_Catalog that the employee may choose from.
 
-    These are the cars of the employee's own eligibility group and of the groups below it, taken
-    from the stored profile. Without a stored group there are no cars and the missing field is
-    named, so ask the employee for the group first. Each car comes with the key to pass to the
-    other tools. Only the Powertrain says which cars are electric.
+    These are the cars of the employee's own eligibility group and of the groups below it. The
+    group follows from the stored occupation, or the representative set it. Without it there are
+    no cars and the missing field, the occupation, is named, so ask the employee for the
+    occupation first. Each car comes with the key to pass to the other tools, and with the
+    catalog's participation. Only the Powertrain says which cars are electric.
     """
     deps = ctx.deps
-    group = deps.conversations.state(deps.conversation_id).profile.eligibility_group
+    group = deps.conversations.state(deps.conversation_id).employee_group.group
     if group is None:
-        return CatalogToolResult(cars=[], missing=FieldLabel.of(MissingField.ELIGIBILITY_GROUP))
+        return CatalogToolResult(cars=[], missing=FieldLabel.of(MissingField.OCCUPATION))
     cars = deps.config.catalog.cars_for(group, deps.config.rules.groups.order)
     records = deps.lookup.get_many(car.official_key for car in cars)
     return CatalogToolResult(
@@ -455,6 +457,9 @@ def _catalog_item(car: CatalogCar, record: CarRecord) -> CatalogCarItem:
         family_track=car.family_track,
         powertrain=record.powertrain,
         powertrain_label=copy_he.POWERTRAIN_LABELS[record.powertrain],
+        catalog_participation=None
+        if car.default_participation is None
+        else display(car.default_participation),
     )
 
 
@@ -542,17 +547,21 @@ def ask_rep(
 ) -> RepToolResult:
     """Ask the transport representative for what only the representative can answer.
 
-    Use it when the employee says they do not know the information, and for an occupation that is
-    not in the occupations table. Ask the employee first for everything the employee can answer.
-    Calling it again for the same field and car returns the question that is open, so repeating it
-    is safe. Tell the employee the employee_notice sentence as it is, then show the comparison
-    that compare_alternatives returns. Never guess the missing value.
+    Use it when the employee says they do not know the information, when the employee says that
+    none of the occupations of the table is theirs, when the employee says their group differs
+    from the group in use and accepts to ask, and when the employee asks to have the catalog's
+    participation in a new car confirmed. Ask the employee first for everything the employee can
+    answer. Calling it again for the same field and car returns the question that is open, so
+    repeating it is safe. Tell the employee the employee_notice sentence as it is, then show the
+    comparison that compare_alternatives returns. Never guess the missing value.
 
     Args:
-        field: What is missing. new_car_participation is the monthly participation in a new car,
-            and needs car_key. occupation asks whether the stored occupation may give up the car.
-            current_car asks for help to identify the current car. current_car_participation is
-            the monthly participation in the current car.
+        field: What is asked. new_car_participation is the monthly participation in a new car,
+            and needs car_key: for a car the comparison lists it as missing for, or to confirm the
+            catalog's amount when the employee asks. occupation asks which table entry the stored
+            occupation is. eligibility_group asks for the employee's group when the employee says
+            it differs. current_car asks for help to identify the current car.
+            current_car_participation is the monthly participation in the current car.
         car_key: The catalog car that new_car_participation is about. Not used for other fields.
     """
     deps = ctx.deps
@@ -562,7 +571,7 @@ def ask_rep(
             "new_car_participation needs the car_key of a Car_Catalog car, "
             "as list_catalog_cars returns it."
         )
-    if field is RepField.OCCUPATION and not _stored_occupation(deps):
+    if field in (RepField.OCCUPATION, RepField.ELIGIBILITY_GROUP) and not _stored_occupation(deps):
         raise ModelRetry(
             "The occupation is not stored. Ask the employee for it and save it with "
             "update_profile before asking the representative."

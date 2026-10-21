@@ -29,7 +29,8 @@ To run the app (quick start):
 To work on the code (dev mode and `./check.sh`), also:
 
 - [uv](https://docs.astral.sh/uv/) 0.12.23 and Python 3.12 (uv installs Python itself if needed)
-- Node.js 22.22 or later, with npm
+- Node.js 22.22.3 or later in the 22 line, or 24.15 or later, with npm (Angular CLI 22.2 refuses
+  older versions)
 
 ## Quick start
 
@@ -69,6 +70,27 @@ Notes:
   unprivileged user. Their files must be readable by everyone (`chmod -R a+rX config data`), which
   is the default unless a strict `umask` was used when the repository was cloned.
 - After editing `config/*.yaml` or `.env`, run `docker compose restart backend`.
+
+## How the advisor decides
+
+- **Eligibility group:** it comes from the employee's occupation in `config/occupations.yaml`. The
+  employee cannot set it, in the chat or in the panel. Only the transport representative can
+  override it, by answering a group question. The panel shows the group read-only, with its source.
+- **Car mandatory:** an occupation marked `car_mandatory` has no "no car" state, so the advisor
+  asks such an employee which car they have.
+- **Participation in a new car:** the catalog's `default_participation`, so the column is
+  calculated at once. Each column shows where its participation comes from (the employee, the
+  catalog or the representative), and a line under the table says that the final amount is set
+  with the representative. If the employee asks the representative to confirm it, the column stays
+  calculated and is marked as awaiting the representative until the answer replaces the amount.
+- **Usage-value check:** at startup every catalog `usage_value` is compared with the dataset. A
+  mismatch does not stop the app: it logs a `catalog_usage_value_mismatch` line and lists the car
+  under `catalog_warnings` in `/api/health`. The calculation always uses the dataset's value.
+- **Rep answers:** a participation question takes an amount (prefilled with the catalog amount),
+  an effective date and a note; an occupation or group question takes a choice from a list; any
+  other question takes free text. A chosen occupation or group is written to the employee's
+  profile. Migration `0002` adds `rep_questions.answer_choice` for these answers and renames the
+  question type `occupation_waiver` to `occupation`. It runs by itself at startup.
 
 ## Dev mode
 

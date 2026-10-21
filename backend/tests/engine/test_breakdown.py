@@ -20,7 +20,6 @@ from tests.engine.test_comparison import (
     EV_KEY,
     FAMILY_CAR,
     FAMILY_KEY,
-    FIELD_SALES_NO_CAR,
     HIGHER_CAR,
     NO_CAR_PROFILE,
     PROFILE,
@@ -30,6 +29,7 @@ from tests.engine.test_comparison import (
     SPARE_KEY,
     UNLISTED_CAR,
     WAIVER,
+    WAREHOUSE_NO_CAR,
     make_inputs,
     make_record,
     make_rules,
@@ -118,7 +118,7 @@ def test_a_switch_to_an_electric_car_is_split_into_the_hand_checked_components()
         # From 9,285 without a car and without a maintenance. 1,500 of usage value costs 32% = 480
         # (8,805), the refund adds 250 (9,055) and the participation of 400 is deducted (8,655).
         pytest.param(
-            FIELD_SALES_NO_CAR,
+            WAREHOUSE_NO_CAR,
             EV_CAR,
             (-480, 250, -400, 0),
             -630,

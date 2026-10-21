@@ -120,6 +120,10 @@ PROFILE_FIELD_RANGES: Mapping[str, str] = {
 # The allowed range of a change to a field that Employee_Profile does not have.
 UNKNOWN_PROFILE_FIELD = "שדה לא מוכר."
 
+# Why a change of the employee to the group is refused: the group follows from the occupation, and
+# only an answer of Transport_Rep sets another one (Req 9.20, 11.2).
+GROUP_FROM_OCCUPATION = "קבוצת הזכאות נקבעת לפי העיסוק, ורק נציג/ת התחבורה יכול/ה לשנות אותה."
+
 # What a car search lacks when it is rejected (Req 2.13), keyed by the name of the query parameter.
 SEARCH_INPUT_REQUIRED: Mapping[str, str] = {
     "registration_year": "יש להזין שנת רישום בת ארבע ספרות.",
@@ -132,6 +136,7 @@ REP_ANSWER_FIELD_ERRORS: Mapping[str, str] = {
     "effective_date": "יש להזין תאריך תחילה תקף.",
     "note": "ההערה ארוכה מדי, עד 500 תווים.",
     "text": "יש להזין תשובה בטקסט, עד 2,000 תווים.",
+    "choice": "יש לבחור אחת מהאפשרויות ברשימה.",
 }
 
 # The Rep_Question texts (Req 10.2). Each one names the employee by label and group, and at most
@@ -158,8 +163,18 @@ def new_car_participation_question(subject: str, car_name: str, car_key: CarKey)
     )
 
 
-def occupation_waiver_question(subject: str, occupation: str) -> str:
-    return f'{subject}: האם העיסוק "{occupation}", שאינו מופיע בטבלת העיסוקים, מאפשר ויתור על רכב?'
+def occupation_question(subject: str, occupation: str) -> str:
+    return (
+        f'{subject}: העיסוק "{occupation}" אינו מופיע בטבלת העיסוקים. '
+        "איזו שורה בטבלה מתאימה לעובד/ת?"
+    )
+
+
+def eligibility_group_question(subject: str, occupation: str | None) -> str:
+    source = "" if occupation is None else f' מזו של העיסוק "{occupation}"'
+    return (
+        f"{subject}: העובד/ת מציין/ת שקבוצת הזכאות שלו/ה שונה{source}. מהי קבוצת הזכאות של העובד/ת?"
+    )
 
 
 def current_car_question(subject: str) -> str:

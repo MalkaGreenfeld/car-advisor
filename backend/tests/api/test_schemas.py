@@ -39,6 +39,7 @@ from car_advisor.conversations.service import (
     AgentStatus,
     ComparisonView,
     ConversationState,
+    EmployeeGroup,
     MessageRole,
     NoticeCode,
     OpenQuestion,
@@ -93,8 +94,9 @@ STATE = ConversationState(
         ),
     ),
     profile=EmployeeProfile(
-        eligibility_group=Group.B, base_salary=Decimal("16000"), pay_components=[]
+        occupation="מפתח/ת תוכנה", base_salary=Decimal("16000"), pay_components=[]
     ),
+    employee_group=EmployeeGroup(group=Group.B, source="occupation"),
     alternatives=(CarAlternative(car_key=KEY), WaiverAlternative()),
     comparison=COMPARISON,
     open_questions=(
@@ -244,6 +246,9 @@ def test_a_rep_answer_can_hold_a_text() -> None:
     ("body", "locations"),
     [
         pytest.param({"participation": PARTICIPATION, "text": "Both"}, [()], id="both"),
+        pytest.param({"choice": "B", "text": "Both"}, [()], id="choice-and-text"),
+        pytest.param({"choice": ""}, [("choice",)], id="empty-choice"),
+        pytest.param({"choice": "x" * 201}, [("choice",)], id="over-long-choice"),
         pytest.param({}, [()], id="neither"),
         pytest.param({"participation": None, "text": None}, [()], id="both-null"),
         pytest.param(
@@ -350,6 +355,7 @@ def test_the_state_payload_has_the_fields_of_the_design() -> None:
         "id",
         "messages",
         "profile",
+        "employee_group",
         "alternatives",
         "comparison",
         "open_questions",
@@ -372,7 +378,9 @@ def test_the_state_payload_has_the_fields_of_the_design() -> None:
             "created_at": "2026-10-13T09:12:04Z",
         },
     ]
-    assert body["profile"]["eligibility_group"] == "B"
+    # No Group_Override: the group in use comes from the occupation.
+    assert body["profile"]["eligibility_group"] is None
+    assert body["employee_group"] == {"group": "B", "source": "occupation"}
     assert body["profile"]["base_salary"] == "16000"
     assert body["profile"]["pay_components"] == []
     assert body["alternatives"] == [{"kind": "car", "car_key": KEY_TEXT}, {"kind": "waiver"}]
@@ -421,9 +429,9 @@ def test_a_catalog_car_is_labelled_with_its_group() -> None:
 
 
 def test_an_empty_catalog_names_the_missing_field() -> None:
-    empty = CatalogResponse(cars=(), missing_field="eligibility_group")
+    empty = CatalogResponse(cars=(), missing_field="occupation")
 
-    assert empty.model_dump(mode="json") == {"cars": [], "missing_field": "eligibility_group"}
+    assert empty.model_dump(mode="json") == {"cars": [], "missing_field": "occupation"}
     with pytest.raises(ValidationError):
         CatalogResponse.model_validate({"cars": [], "missing_field": "base_salary"})
 
@@ -480,12 +488,15 @@ def test_a_rep_question_has_the_fields_of_the_design() -> None:
                 "employee": {"display_name": "Employee 4821", "number": 4821},
                 "eligibility_group": "C",
                 "car": {"display_name": "Tesla Model 3", "car_key": KEY_TEXT},
+                "suggested_amount": None,
+                "choices": None,
                 "status": "answered",
                 "answer": {
                     "amount": "350.00",
                     "effective_date": "2026-01-01",
                     "note": None,
                     "text": None,
+                    "choice": None,
                 },
             }
         ]
@@ -510,6 +521,7 @@ def test_health_has_the_fields_of_the_design() -> None:
         "dataset_loaded": True,
         "tax_year": 2026,
         "record_count": 77988,
+        "catalog_warnings": [],
     }
 
 
@@ -549,7 +561,7 @@ def test_the_error_codes_are_the_ones_of_the_design() -> None:
 
 RESPONSES: dict[str, BaseModel] = {
     "/state": ConversationStateResponse.from_state(STATE, agent_available=True),
-    "/catalog": CatalogResponse(cars=(), missing_field="eligibility_group"),
+    "/catalog": CatalogResponse(cars=(), missing_field="occupation"),
     "/rep": RepQuestionsResponse(questions=(QUESTION,)),
     "/health": Health(
         database_reachable=False, dataset_loaded=False, tax_year=2026, record_count=0

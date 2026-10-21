@@ -37,7 +37,8 @@ const MODEL_3: CarCandidateView = {
 };
 
 const SCRIPT_ORDER = [
-  fields.eligibility_group.label,
+  copy.group.label,
+  fields.occupation.label,
   fields.base_salary.label,
   fields.pay_components.label,
   fields.pension_rate_percent.label,
@@ -46,7 +47,6 @@ const SCRIPT_ORDER = [
   fields.has_current_car.label,
   fields.current_car.label,
   fields.current_car_participation.label,
-  fields.occupation.label,
   fields.children_under_23.label,
   fields.display_name.label,
 ];
@@ -55,11 +55,16 @@ function stateWith(changes: Partial<EmployeeProfile>, id = 'c1'): ConversationSt
   return conversationState(id, { profile: { ...EMPTY_PROFILE, ...changes } });
 }
 
+const OCCUPATION_NAMES = ['מפתח/ת תוכנה', 'מנהל/ת מוצר'];
+
 function createFakeApi() {
-  return {
+  const api = {
     patchProfile: vi.fn<ApiClient['patchProfile']>(),
     searchCars: vi.fn<ApiClient['searchCars']>(),
+    getOccupations: vi.fn<ApiClient['getOccupations']>(),
   };
+  api.getOccupations.mockResolvedValue({ names: OCCUPATION_NAMES });
+  return api;
 }
 
 describe('MyDetails', () => {
@@ -176,7 +181,6 @@ describe('MyDetails', () => {
       await open(
         stateWith({
           display_name: 'דנה',
-          eligibility_group: 'C',
           base_salary: '14200',
           pay_components: [{ kind: 'commission', label: 'עמלות משתנות', amount: '1000' }],
           pension_rate_percent: '6',
@@ -199,7 +203,6 @@ describe('MyDetails', () => {
       );
 
       expect(shown).toEqual({
-        'details-eligibility_group': 'C',
         'details-base_salary': '14200',
         'details-pension_rate_percent': '6',
         'details-study_fund_rate_percent': '2.5',
@@ -220,14 +223,6 @@ describe('MyDetails', () => {
     it('use selects for the choices and number keyboards for the numbers', async () => {
       await open();
 
-      const group = control('eligibility_group') as HTMLSelectElement;
-      expect(Array.from(group.options, (option) => option.textContent?.trim())).toEqual([
-        copy.choices.noGroup,
-        'א',
-        'ב',
-        'ג',
-        'ד',
-      ]);
       expect(control('has_current_car').tagName).toBe('SELECT');
       expect(input('base_salary').getAttribute('inputmode')).toBe('decimal');
       expect(input('credit_points').getAttribute('inputmode')).toBe('decimal');
@@ -236,27 +231,74 @@ describe('MyDetails', () => {
     });
   });
 
-  describe('an invalid value', () => {
-    // The group is a select, so the test adds the option that the page itself would never offer.
-    function enterGroup(value: string): void {
-      (control('eligibility_group') as HTMLSelectElement).append(new Option(value, value));
-      choose('eligibility_group', value);
+  describe('the group (Req 11.2)', () => {
+    function groupText(): string | undefined {
+      return textOf('#details-group');
     }
 
+    it('is shown read-only, with no control to change it', async () => {
+      await open(conversationState('c1', { employee_group: { group: 'B', source: 'occupation' } }));
+
+      expect(groupText()).toBe(`ב (${copy.group.fromOccupation})`);
+      expect(all('#details-group')[0].tagName).toBe('OUTPUT');
+      expect(all('select#details-eligibility_group, input#details-eligibility_group')).toEqual([]);
+      expect(textOf('#details-group-hint')).toBe(copy.group.hint);
+    });
+
+    it('names the representative as its source for a group the representative set', async () => {
+      await open(
+        conversationState('c1', { employee_group: { group: 'D', source: 'representative' } }),
+      );
+
+      expect(groupText()).toBe(`ד (${copy.group.fromRepresentative})`);
+    });
+
+    it('says that it follows from the occupation while it is unknown', async () => {
+      await open();
+
+      expect(groupText()).toBe(copy.group.unknown);
+    });
+  });
+
+  describe('the occupation', () => {
+    it('suggests the names of the table, and takes another name too (Req 11.19)', async () => {
+      await open();
+      await settle();
+
+      const list = input('occupation').getAttribute('list');
+      expect(list).not.toBeNull();
+      const options = all<HTMLOptionElement>(`datalist#${list} option`).map((o) => o.value);
+      expect(options).toEqual(OCCUPATION_NAMES);
+
+      type('occupation', 'גנן');
+      leave('occupation');
+      await settle();
+      expect(api.patchProfile).toHaveBeenCalledWith('c1', { occupation: 'גנן' });
+    });
+
+    it('still takes any text when the names cannot be read', async () => {
+      api.getOccupations.mockRejectedValue(new ApiError(0, 'network_error'));
+      await open();
+      await settle();
+
+      expect(all('datalist option')).toEqual([]);
+      type('occupation', 'מורה');
+      leave('occupation');
+      await settle();
+      expect(api.patchProfile).toHaveBeenCalledWith('c1', { occupation: 'מורה' });
+    });
+  });
+
+  describe('an invalid value', () => {
     it.each<[DetailsFieldName, string, string]>([
-      ['eligibility_group', 'E', copy.errors.group],
       ['base_salary', '-1', copy.errors.amount],
       ['pension_rate_percent', '101', copy.errors.percent],
       ['credit_points', '-1', copy.errors.points],
       ['children_under_23', '2.5', copy.errors.count],
       ['study_fund_rate_percent', 'abc', copy.errors.percent],
     ])('is rejected next to the field, and not sent: %s %j', async (name, text, message) => {
-      await open(stateWith({ eligibility_group: 'B' }));
-      if (name === 'eligibility_group') {
-        enterGroup(text);
-      } else {
-        type(name, text);
-      }
+      await open(stateWith({ base_salary: '14200' }));
+      type(name, text);
 
       leave(name);
       await settle();
@@ -264,7 +306,7 @@ describe('MyDetails', () => {
       expect(control(name).getAttribute('aria-invalid')).toBe('true');
       expect(messageOf(name)).toBe(message);
       expect(api.patchProfile).not.toHaveBeenCalled();
-      expect(store.state()?.profile.eligibility_group).toBe('B');
+      expect(store.state()?.profile.base_salary).toBe('14200');
       expect(store.notice()).toBeNull();
     });
 
@@ -300,10 +342,8 @@ describe('MyDetails', () => {
 
   describe('a valid value', () => {
     it('is saved when the field is left, and the field then shows the stored value', async () => {
-      api.patchProfile.mockResolvedValue(
-        stateWith({ eligibility_group: 'C', base_salary: '16000' }),
-      );
-      await open(stateWith({ eligibility_group: 'C', base_salary: '14200' }));
+      api.patchProfile.mockResolvedValue(stateWith({ base_salary: '16000' }));
+      await open(stateWith({ base_salary: '14200' }));
       type('base_salary', '16,000');
 
       leave('base_salary');
@@ -328,7 +368,6 @@ describe('MyDetails', () => {
     });
 
     it.each<[DetailsFieldName, string, ProfileChanges]>([
-      ['eligibility_group', 'D', { eligibility_group: 'D' }],
       ['pension_rate_percent', '6.5', { pension_rate_percent: '6.5' }],
       ['study_fund_rate_percent', '100', { study_fund_rate_percent: '100' }],
       ['credit_points', '2.25', { credit_points: '2.25' }],

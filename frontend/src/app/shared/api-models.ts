@@ -43,6 +43,8 @@ export interface CurrentCarDescription {
 
 export interface EmployeeProfile {
   readonly display_name: string | null;
+  // The Group_Override, which only an answer of the representative writes. The employee's changes
+  // never send it: the group in use is EmployeeGroupView.
   readonly eligibility_group: Group | null;
   readonly base_salary: DecimalString | null;
   // An empty list means the employee has none, which counts as provided. Null means not asked yet.
@@ -60,8 +62,20 @@ export interface EmployeeProfile {
 
 export type ProfileField = keyof EmployeeProfile;
 
+// The fields that the employee may change: every field but the group (Req 11.2).
+export type EditableProfileField = Exclude<ProfileField, 'eligibility_group'>;
+
 // A null value clears its field.
-export type ProfileChanges = { readonly [F in ProfileField]?: EmployeeProfile[F] };
+export type ProfileChanges = { readonly [F in EditableProfileField]?: EmployeeProfile[F] };
+
+export type GroupSource = 'occupation' | 'representative';
+
+// The group in use and where it comes from. Both are null while the occupation is missing or matches
+// no entry of the table, and the representative set no group.
+export interface EmployeeGroupView {
+  readonly group: Group | null;
+  readonly source: GroupSource | null;
+}
 
 export interface CarAlternative {
   readonly kind: 'car';
@@ -129,6 +143,8 @@ export interface TodayView {
 
 export type AlternativeStatus = 'calculated' | 'not_eligible' | 'pending';
 
+export type ParticipationSource = 'employee' | 'catalog' | 'representative';
+
 export interface AlternativeView {
   // The index in the conversation's alternatives, which is also the column order.
   readonly position: number;
@@ -139,6 +155,10 @@ export interface AlternativeView {
   readonly car_budget: number | null;
   readonly participation: number | null;
   readonly participation_effective_date: IsoDate | null;
+  // Who gave the participation, null for giving up the car or while it is missing.
+  readonly participation_source: ParticipationSource | null;
+  // True for a catalog amount whose confirmation by the representative is awaited.
+  readonly participation_awaiting_rep: boolean;
   readonly employer_gap_share: number | null;
   readonly employee_gap_share: number | null;
   readonly usage_value: number | null;
@@ -175,6 +195,7 @@ export interface ConversationState {
   readonly id: string;
   readonly messages: readonly StoredMessage[];
   readonly profile: EmployeeProfile;
+  readonly employee_group: EmployeeGroupView;
   readonly alternatives: readonly Alternative[];
   readonly comparison: ComparisonView | null;
   readonly open_questions: readonly OpenQuestion[];
@@ -205,8 +226,14 @@ export interface CatalogCarView {
 
 export interface CatalogResponse {
   readonly cars: readonly CatalogCarView[];
-  // Names the profile field to fill in when the list is empty for lack of it.
-  readonly missing_field: 'eligibility_group' | null;
+  // Names the profile field to fill in when the list is empty for lack of it: the group follows
+  // from the occupation.
+  readonly missing_field: 'occupation' | null;
+}
+
+export interface OccupationsResponse {
+  // The names of the occupations table, in its order.
+  readonly names: readonly string[];
 }
 
 export interface CarCandidateView {
@@ -227,7 +254,7 @@ export interface CarSearchResponse {
   readonly none_found: boolean;
 }
 
-export type RepQuestionType = 'participation' | 'occupation_waiver' | 'other';
+export type RepQuestionType = 'participation' | 'occupation' | 'eligibility_group' | 'other';
 
 export type RepQuestionStatus = 'open' | 'answered';
 
@@ -241,13 +268,20 @@ export interface RepCar {
   readonly car_key: CarKey;
 }
 
-// A participation answer has an amount and a date, and may have a note. Any other answer is the
-// text alone.
+// One choice of an occupation or eligibility group question.
+export interface RepChoice {
+  readonly value: string;
+  readonly label: string;
+}
+
+// A participation answer has an amount and a date, and may have a note. A choice answer is the
+// chosen value, and any other answer is the text alone.
 export interface StoredAnswer {
   readonly amount: DecimalString | null;
   readonly effective_date: IsoDate | null;
   readonly note: string | null;
   readonly text: string | null;
+  readonly choice: string | null;
 }
 
 // It holds no conversation ID and no salary data, because Rep_Screen has no login.
@@ -259,6 +293,10 @@ export interface RepQuestionView {
   readonly employee: RepEmployee;
   readonly eligibility_group: Group | null;
   readonly car: RepCar | null;
+  // The catalog's participation of the car of a participation question, else null.
+  readonly suggested_amount: DecimalString | null;
+  // The choices of an occupation or eligibility group question, else null.
+  readonly choices: readonly RepChoice[] | null;
   readonly status: RepQuestionStatus;
   readonly answer: StoredAnswer | null;
 }
@@ -277,14 +315,18 @@ export interface ParticipationAnswerRequest {
   readonly participation: ParticipationRequest;
 }
 
+export interface ChoiceAnswerRequest {
+  readonly choice: string;
+}
+
 export interface TextAnswerRequest {
   readonly text: string;
 }
 
-export type RepAnswerRequest = ParticipationAnswerRequest | TextAnswerRequest;
+export type RepAnswerRequest = ParticipationAnswerRequest | ChoiceAnswerRequest | TextAnswerRequest;
 
+// The group is not one: it follows from the occupation, and the employee cannot set it.
 export type DocumentField =
-  | 'eligibility_group'
   | 'base_salary'
   | 'pay_components'
   | 'pension_rate_percent'
@@ -305,6 +347,15 @@ export interface Health {
   readonly tax_year: number;
   // 0 while the dataset cannot be read.
   readonly record_count: number;
+  // Catalog cars whose usage value differs from the dataset's; they never change the status.
+  readonly catalog_warnings: readonly CatalogWarning[];
+}
+
+export interface CatalogWarning {
+  readonly display_name: string;
+  readonly car_key: CarKey;
+  readonly catalog_usage_value: number;
+  readonly dataset_usage_value: number;
 }
 
 export const ERROR_CODES = [

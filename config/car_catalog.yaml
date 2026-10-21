@@ -3,7 +3,9 @@ mock_data: "MOCK DATA - the challenge's catalog of 2026-10-12. The costs and the
 # The sheet puts the two family-track cars in a group of their own. Here they are in group A, so that the group filter
 # shows them to every employee; the number of children decides who may take them.
 # monthly_cost is the cost to the company. For a family-track car it sets the gap above the budget.
-# default_participation is only a suggestion for the representative; the engine never uses it.
+# default_participation is the participation of a new car until the representative gives another amount.
+# usage_value is the sheet's value, only a check: the app warns when it differs from the dataset, and always
+# calculates with the dataset's value.
 cars:
   - display_name: "Kia Picanto"
     official_key:
@@ -14,6 +16,7 @@ cars:
       model_code: "00643"
     monthly_cost: 2650
     default_participation: 150
+    usage_value: 2690
     group: A
     family_track: false
 
@@ -26,6 +29,7 @@ cars:
       model_code: "00130"
     monthly_cost: 3400
     default_participation: 200
+    usage_value: 3350
     group: A
     family_track: false
 
@@ -38,6 +42,7 @@ cars:
       model_code: "00012"
     monthly_cost: 3300
     default_participation: 200
+    usage_value: 2590
     group: A
     family_track: false
 
@@ -50,6 +55,7 @@ cars:
       model_code: "00618"
     monthly_cost: 3450
     default_participation: 200
+    usage_value: 3880
     group: A
     family_track: false
 
@@ -62,6 +68,7 @@ cars:
       model_code: "00619"
     monthly_cost: 3600
     default_participation: 250
+    usage_value: 2950
     group: B
     family_track: false
 
@@ -74,6 +81,7 @@ cars:
       model_code: "00032"
     monthly_cost: 3550
     default_participation: 250
+    usage_value: 2430
     group: B
     family_track: false
 
@@ -86,6 +94,7 @@ cars:
       model_code: "00295"
     monthly_cost: 3700
     default_participation: 250
+    usage_value: 4120
     group: B
     family_track: false
 
@@ -98,6 +107,7 @@ cars:
       model_code: "00138"
     monthly_cost: 3650
     default_participation: 250
+    usage_value: 2960
     group: B
     family_track: false
 
@@ -110,6 +120,7 @@ cars:
       model_code: "00296"
     monthly_cost: 4300
     default_participation: 300
+    usage_value: 4070
     group: C
     family_track: false
 
@@ -122,6 +133,7 @@ cars:
       model_code: "00003"
     monthly_cost: 4100
     default_participation: 300
+    usage_value: 3130
     group: C
     family_track: false
 
@@ -134,6 +146,7 @@ cars:
       model_code: "00675"
     monthly_cost: 4350
     default_participation: 300
+    usage_value: 2930
     group: C
     family_track: false
 
@@ -146,6 +159,7 @@ cars:
       model_code: "00133"
     monthly_cost: 4450
     default_participation: 400
+    usage_value: 4790
     group: C
     family_track: false
 
@@ -158,6 +172,7 @@ cars:
       model_code: "00446"
     monthly_cost: 4200
     default_participation: 350
+    usage_value: 4570
     group: C
     family_track: false
 
@@ -170,6 +185,7 @@ cars:
       model_code: "00730"
     monthly_cost: 5100
     default_participation: 500
+    usage_value: 4150
     group: D
     family_track: false
 
@@ -182,6 +198,7 @@ cars:
       model_code: "01455"
     monthly_cost: 5000
     default_participation: 500
+    usage_value: 5150
     group: D
     family_track: false
 
@@ -194,6 +211,7 @@ cars:
       model_code: "00294"
     monthly_cost: 5150
     default_participation: 500
+    usage_value: 4550
     group: D
     family_track: false
 
@@ -206,6 +224,7 @@ cars:
       model_code: "00014"
     monthly_cost: 5200
     default_participation: 500
+    usage_value: 4970
     group: D
     family_track: false
 
@@ -218,6 +237,7 @@ cars:
       model_code: "00368"
     monthly_cost: 5200
     default_participation: 500
+    usage_value: 4470
     group: D
     family_track: false
 
@@ -230,6 +250,7 @@ cars:
       model_code: "00648"
     monthly_cost: 6000
     default_participation: 500
+    usage_value: 8120
     group: A
     family_track: true
 
@@ -242,5 +263,6 @@ cars:
       model_code: "00533"
     monthly_cost: 5600
     default_participation: 500
+    usage_value: 4700
     group: A
     family_track: true

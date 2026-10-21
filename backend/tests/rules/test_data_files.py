@@ -109,6 +109,18 @@ def test_every_car_has_a_default_participation(config: AppConfig) -> None:
     assert all(car.default_participation is not None for car in config.catalog.cars)
 
 
+def test_every_usage_value_of_the_sheet_equals_the_dataset(
+    config: AppConfig, records: dict[CarKey, CarRecord]
+) -> None:
+    differing = {
+        car.display_name: (car.usage_value, records[car.official_key].usage_value)
+        for car in config.catalog.cars
+        if car.usage_value != records[car.official_key].usage_value
+    }
+
+    assert differing == {}
+
+
 def test_every_group_has_a_car_that_costs_less_than_its_budget(config: AppConfig) -> None:
     budgets = config.rules.groups.budgets
     groups_with_unused_budget = {
@@ -125,6 +137,16 @@ def test_the_occupations_are_the_14_of_the_challenge(config: AppConfig) -> None:
 
     assert len(occupations) == 14
     assert sum(not item.car_waiver_allowed for item in occupations) == 4
+    assert sum(item.car_mandatory for item in occupations) == 4
+
+
+def test_every_group_has_an_occupation(config: AppConfig) -> None:
+    assert {item.group for item in config.occupations.occupations} == set(Group)
+
+
+def test_the_car_is_mandatory_exactly_where_the_waiver_is_not_allowed(config: AppConfig) -> None:
+    for item in config.occupations.occupations:
+        assert item.car_mandatory is not item.car_waiver_allowed, item.name
 
 
 def test_giving_up_the_car_is_allowed_only_with_a_car_maintenance_amount(
@@ -139,19 +161,24 @@ def test_occupation_names_are_hebrew(config: AppConfig) -> None:
 
 
 @pytest.mark.parametrize(
-    ("typed", "waiver_allowed", "maintenance"),
+    ("typed", "group", "waiver_allowed", "maintenance"),
     [
-        pytest.param("מפתחת תוכנה", True, 1500, id="feminine"),
-        pytest.param("מפתח תוכנה", True, 1500, id="masculine"),
-        pytest.param("אנליסטית נתונים", True, 1500, id="analyst-feminine"),
-        pytest.param("נציגת מכירות שטח", False, 0, id="field-sales-feminine"),
-        pytest.param("מנהל חטיבה", True, 3000, id="division-manager"),
+        pytest.param("מפתחת תוכנה", Group.B, True, 1500, id="feminine"),
+        pytest.param("מפתח תוכנה", Group.B, True, 1500, id="masculine"),
+        pytest.param("אנליסטית נתונים", Group.B, True, 1500, id="analyst-feminine"),
+        pytest.param("נציגת מכירות שטח", Group.B, False, 0, id="field-sales-feminine"),
+        pytest.param("מנהל חטיבה", Group.D, True, 3000, id="division-manager"),
+        pytest.param("רכזת רכש", Group.A, True, 1200, id="purchasing"),
     ],
 )
 def test_an_occupation_typed_in_either_gender_finds_its_entry(
-    config: AppConfig, typed: str, waiver_allowed: bool, maintenance: int
+    config: AppConfig, typed: str, group: Group, waiver_allowed: bool, maintenance: int
 ) -> None:
     entry = config.occupations.find(typed)
 
     assert entry is not None
-    assert (entry.car_waiver_allowed, entry.car_maintenance) == (waiver_allowed, maintenance)
+    assert (entry.group, entry.car_waiver_allowed, entry.car_maintenance) == (
+        group,
+        waiver_allowed,
+        maintenance,
+    )

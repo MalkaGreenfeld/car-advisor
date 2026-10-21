@@ -223,8 +223,10 @@ class CatalogCar(BaseModel, extra="forbid"):
     display_name: _Text
     official_key: CarKey
     monthly_cost: Annotated[Decimal, Field(gt=0)]
-    # Only a suggestion for the representative's answer; the engine never uses it.
+    # The Participation of a new car until the representative gives another amount (Req 6.3).
     default_participation: Money | None = None
+    # The sheet's usage value, only checked against the dataset, whose value is used (Req 4.18).
+    usage_value: Annotated[int, Field(ge=0)] | None = None
     group: Group
     family_track: bool = False
 
@@ -268,8 +270,17 @@ def _name_forms(name: str) -> set[str]:
 
 class Occupation(BaseModel, extra="forbid"):
     name: _Text
+    # The employee's Eligibility_Group, unless the representative set a Group_Override (Req 5.23).
+    group: Group
+    car_mandatory: bool
     car_waiver_allowed: bool
     car_maintenance: Money
+
+    @model_validator(mode="after")
+    def _mandatory_car_has_no_waiver(self) -> Self:
+        if self.car_mandatory and self.car_waiver_allowed:
+            raise ValueError("car_mandatory and car_waiver_allowed must not both be true")
+        return self
 
 
 class OccupationsTable(BaseModel, extra="forbid"):

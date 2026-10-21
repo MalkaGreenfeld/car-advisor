@@ -129,6 +129,33 @@ def test_a_catalog_car_missing_from_the_dataset_stops_startup_and_is_listed(
     assert line["fields"] == [f"Tesla Model 3: {CAR_MISSING}"]
 
 
+def test_a_differing_catalog_usage_value_starts_the_app_and_logs_one_warning_per_car(
+    app_settings: Settings, sqlite_startup: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    catalog = app_settings.catalog_path
+    catalog.write_text(catalog.read_text() + "    usage_value: 7000\n")
+
+    services = start(app_settings)
+
+    [warning] = services.catalog_warnings
+    assert (warning.catalog_usage_value, warning.dataset_usage_value) == (7000, 7990)
+    lines = [line for line in logged(caplog) if line["event"] == "catalog_usage_value_mismatch"]
+    assert [(line["level"], line["stage"], line["car_key"]) for line in lines] == [
+        ("WARNING", "catalog_check", "2026-2020-1-01229-00001")
+    ]
+    assert events(caplog, "startup_failed") == []
+
+
+def test_a_matching_catalog_usage_value_gives_no_warning(
+    app_settings: Settings, sqlite_startup: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    catalog = app_settings.catalog_path
+    catalog.write_text(catalog.read_text() + "    usage_value: 7990\n")
+
+    assert start(app_settings).catalog_warnings == ()
+    assert events(caplog, "catalog_usage_value_mismatch") == []
+
+
 def test_without_an_api_key_the_agent_is_unavailable_and_a_warning_is_logged(
     app_settings: Settings, sqlite_startup: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from car_advisor.agent.runner import AgentRunner
 from car_advisor.conversations.service import ConversationService
-from car_advisor.dataset.lookup import CarLookup
+from car_advisor.dataset.lookup import CarLookup, UsageValueMismatch
 from car_advisor.rules.loader import AppConfig
 from car_advisor.settings import Settings
 
@@ -21,6 +21,8 @@ class Services:
     lookup: CarLookup
     conversations: ConversationService
     runner: AgentRunner
+    # The catalog cars whose usage value differs from the dataset, found at startup (Req 4.19).
+    catalog_warnings: tuple[UsageValueMismatch, ...] = ()
 
     @property
     def agent_available(self) -> bool:

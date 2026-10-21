@@ -37,6 +37,7 @@ const conversationState: ConversationState = {
   id: 'c1',
   messages: [],
   profile,
+  employee_group: { group: 'B', source: 'representative' },
   alternatives: [{ kind: 'car', car_key: CAR_KEY }, { kind: 'waiver' }],
   comparison: null,
   open_questions: [],
@@ -55,7 +56,7 @@ const searchResult: CarSearchResponse = {
 };
 
 const documentCandidates: DocumentCandidates = {
-  fields: { base_salary: '16000', eligibility_group: null },
+  fields: { base_salary: '16000', credit_points: null },
   detected: ['base_salary'],
 };
 
@@ -67,8 +68,10 @@ const repQuestion: RepQuestionView = {
   employee: { display_name: 'Employee 4821', number: 4821 },
   eligibility_group: 'B',
   car: { display_name: 'Test car', car_key: CAR_KEY },
+  suggested_amount: '300',
+  choices: null,
   status: 'answered',
-  answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null },
+  answer: { amount: '350', effective_date: '2026-01-01', note: null, text: null, choice: null },
 };
 
 const repQuestions: RepQuestionsResponse = { questions: [repQuestion] };
@@ -78,6 +81,7 @@ const health: Health = {
   dataset_loaded: true,
   tax_year: 2026,
   record_count: 77988,
+  catalog_warnings: [],
 };
 
 interface Route {
@@ -139,6 +143,14 @@ const routes: readonly Route[] = [
     response: catalog,
   },
   {
+    name: 'getOccupations',
+    call: (api) => api.getOccupations(),
+    method: 'GET',
+    url: '/api/occupations',
+    body: null,
+    response: { names: ['מפתח/ת תוכנה', 'מנהל/ת מוצר'] },
+  },
+  {
     name: 'searchCars',
     call: (api) => api.searchCars(2020, 'Model 3+'),
     method: 'GET',
@@ -171,6 +183,14 @@ const routes: readonly Route[] = [
     method: 'POST',
     url: '/api/rep/questions/q1/answer',
     body: { participation: { amount: '350', effective_date: '2026-01-01', note: 'from January' } },
+    response: repQuestion,
+  },
+  {
+    name: 'answerRepQuestion with a choice',
+    call: (api) => api.answerRepQuestion('q1', { choice: 'D' }),
+    method: 'POST',
+    url: '/api/rep/questions/q1/answer',
+    body: { choice: 'D' },
     response: repQuestion,
   },
   {

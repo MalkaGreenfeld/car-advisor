@@ -24,6 +24,7 @@ function pending(position: number, missing: readonly MissingView[]): Alternative
     status: 'pending',
     participation: null,
     participation_effective_date: null,
+    participation_source: null,
     missing,
     ...NO_RESULT,
   });
@@ -42,6 +43,7 @@ function notEligible(position: number): AlternativeView {
     car_budget: null,
     participation: null,
     participation_effective_date: null,
+    participation_source: null,
     usage_value: null,
     ev_refund: null,
     car_maintenance: null,
@@ -86,6 +88,7 @@ function waiver(position: number): AlternativeView {
     car_budget: null,
     participation: 0,
     participation_effective_date: null,
+    participation_source: null,
     usage_value: 0,
     ev_refund: 0,
     car_maintenance: 600,
@@ -422,7 +425,10 @@ describe('ComparisonTable', () => {
     it('shows both shares of the gap, next to the participation of the family track', async () => {
       await open({ today: todayView(), alternatives: [familyTrack(0)] });
 
-      expect(valuesOf(copy.rows.participation)).toEqual(['₪0', '₪400']);
+      const amounts = rowOf(copy.rows.participation).map((cell) =>
+        textOf(cell.querySelector('app-amount')),
+      );
+      expect(amounts).toEqual(['₪0', '₪400']);
       expect(valuesOf(copy.rows.employee_gap_share)).toEqual(['', '₪1,250']);
       expect(valuesOf(copy.rows.employer_gap_share)).toEqual(['', '₪1,250']);
     });
@@ -519,6 +525,48 @@ describe('ComparisonTable', () => {
       await open({ today: todayView(), alternatives: [alternativeView(0)] });
 
       expect(root().querySelector('.empty')).toBeNull();
+    });
+  });
+
+  describe('the source of the participation (Req 6.25-6.26)', () => {
+    function fromCatalog(position: number, awaiting: boolean): AlternativeView {
+      return alternativeView(position, {
+        participation: 300,
+        participation_effective_date: null,
+        participation_source: 'catalog',
+        participation_awaiting_rep: awaiting,
+      });
+    }
+
+    it('names the source next to the amount, and marks a confirmation that is awaited', async () => {
+      await open({
+        today: todayView(),
+        alternatives: [fromCatalog(0, false), fromCatalog(1, true), alternativeView(2)],
+      });
+
+      const [today, plain, awaited, answered] = rowOf(copy.rows.participation);
+      expect(today.querySelector('.source')).toBeNull();
+      expect(textOf(plain.querySelector('.source'))).toBe(copy.participationSource.catalog);
+      expect(plain.querySelector('.tag')).toBeNull();
+      expect(textOf(awaited.querySelector('.tag'))).toBe(copy.awaitingRep);
+      expect(textOf(answered.querySelector('.source'))).toBe(
+        copy.participationSource.representative,
+      );
+    });
+
+    it('adds one line under the table while a column shows the catalog amount', async () => {
+      await open({
+        today: todayView(),
+        alternatives: [fromCatalog(0, false), fromCatalog(1, true)],
+      });
+
+      expect(all('.catalog-note').map(textOf)).toEqual([copy.catalogParticipationNote]);
+    });
+
+    it('has no line when no column shows the catalog amount', async () => {
+      await open({ today: todayView(), alternatives: [alternativeView(0)] });
+
+      expect(root().querySelector('.catalog-note')).toBeNull();
     });
   });
 });

@@ -24,6 +24,8 @@ export class DetailsField {
   readonly options = input<readonly SelectOption[]>();
   // Set for the fields that hold a number, which are typed left to right.
   readonly inputMode = input<'decimal' | 'numeric'>();
+  // Values to pick from in a text input, which still takes any other text.
+  readonly suggestions = input<readonly string[]>();
   // The text next to the field, and whether it says that the value is invalid.
   readonly message = input<string | null>(null);
   readonly invalid = input(false);
@@ -33,6 +35,9 @@ export class DetailsField {
   protected readonly controlId = computed(() => `details-${this.name()}`);
   protected readonly hintId = computed(() => `${this.controlId()}-hint`);
   protected readonly messageId = computed(() => `${this.controlId()}-message`);
+  protected readonly listId = computed(() =>
+    this.suggestions() === undefined ? null : `${this.controlId()}-suggestions`,
+  );
   protected readonly numeric = computed(() => this.inputMode() !== undefined);
   // The message replaces the hint here, because a message states the allowed values anyway.
   protected readonly describedBy = computed(() => {
