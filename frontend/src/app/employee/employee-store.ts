@@ -1,7 +1,13 @@
 import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
 
 import { ApiClient, ApiError } from '../shared/api';
-import { CarKey, ConversationState, FieldError, ProfileChanges } from '../shared/api-models';
+import {
+  CarKey,
+  ConversationState,
+  DocumentCandidates,
+  FieldError,
+  ProfileChanges,
+} from '../shared/api-models';
 import { POLL_INTERVAL_MS, pollWhile } from '../shared/poller';
 import { NoticeKey } from './employee.copy';
 
@@ -32,6 +38,10 @@ export class EmployeeStore {
   readonly notice = signal<NoticeKey | null>(null);
   // Set while a check for updates fails, until the next one works. The last state stays shown.
   readonly updateFailed = signal(false);
+  // Document upload state (Req 13).
+  readonly uploading = signal(false);
+  readonly documentCandidates = signal<DocumentCandidates | null>(null);
+  readonly documentError = signal<string | null>(null);
 
   private readonly resuming = signal(false);
 
@@ -105,6 +115,54 @@ export class EmployeeStore {
       // raises a notice.
       (error) => (error.fields.length > 0 ? null : 'change_not_saved'),
     );
+  }
+
+  async upload(file: File): Promise<void> {
+    const conversationId = this.state()?.id;
+    if (conversationId === undefined) {
+      return;
+    }
+    this.uploading.set(true);
+    this.documentError.set(null);
+    this.documentCandidates.set(null);
+    try {
+      const candidates = await this.api.uploadDocument(conversationId, file);
+      this.documentCandidates.set(candidates);
+    } catch (failure) {
+      if (failure instanceof ApiError) {
+        const errorMap: Record<string, string> = {
+          invalid_file: 'invalidFile',
+          nothing_detected: 'nothingDetected',
+          reader_failed: 'readerFailed',
+          reader_timeout: 'readerTimeout',
+        };
+        this.documentError.set(errorMap[failure.code] ?? 'readerFailed');
+      } else {
+        this.documentError.set('readerFailed');
+      }
+    } finally {
+      this.uploading.set(false);
+    }
+  }
+
+  async confirmDocument(changes: ProfileChanges): Promise<WriteResult> {
+    const result = await this.apply(
+      (conversationId) => this.api.confirmDocument(conversationId, changes),
+      () => 'change_not_saved',
+    );
+    if (result.ok) {
+      // The confirm endpoint triggers a background agent run. Start the resume timer so polling
+      // picks up the agent's reply even though the returned state may not show agent.running yet.
+      clearTimeout(this.resumeTimer);
+      this.resuming.set(true);
+      this.resumeTimer = setTimeout(() => this.resuming.set(false), RESUME_WAIT_MS);
+    }
+    return result;
+  }
+
+  cancelDocument(): void {
+    this.documentCandidates.set(null);
+    this.documentError.set(null);
   }
 
   replaceCar(position: number, carKey: CarKey): Promise<WriteResult> {

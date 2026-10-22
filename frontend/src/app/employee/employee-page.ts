@@ -5,6 +5,8 @@ import { ApiClient, ApiError } from '../shared/api';
 import { sharedCopy } from '../shared/shared.copy';
 import { Chat } from './chat/chat';
 import { ComparisonSummary } from './comparison/comparison-summary';
+import { ConfirmFormComponent } from './document-upload/confirm-form';
+import { UploadButtonComponent } from './document-upload/upload-button';
 import { EmployeeStore } from './employee-store';
 import { employeeCopy } from './employee.copy';
 import { MyDetails } from './my-details/my-details';
@@ -26,7 +28,7 @@ const TRACKED_FIELDS = [
 
 @Component({
   selector: 'app-employee-page',
-  imports: [Chat, ComparisonSummary, MyDetails],
+  imports: [Chat, ComparisonSummary, ConfirmFormComponent, MyDetails, UploadButtonComponent],
   providers: [EmployeeStore],
   templateUrl: './employee-page.html',
   styleUrl: './employee-page.scss',

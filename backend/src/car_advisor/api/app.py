@@ -22,9 +22,11 @@ from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session, sessionmaker
 
 from car_advisor.agent.advisor import build_advisor
+from car_advisor.agent.document_reader import build_reader
 from car_advisor.agent.runner import AgentBusy, AgentRunner
 from car_advisor.agent.tools import AdvisorDeps
 from car_advisor.api.conversations import router as conversations_router
+from car_advisor.api.documents import router as documents_router
 from car_advisor.api.health import router as health_router
 from car_advisor.api.rep import router as rep_router
 from car_advisor.api.schemas import ErrorBody, ErrorCode
@@ -153,13 +155,15 @@ def build_model(settings: Settings, api_key: SecretStr) -> Model:
     return OpenAIResponsesModel(settings.llm_model, provider=provider)
 
 
-def build_agent(settings: Settings) -> Agent[AdvisorDeps, str] | None:
-    """Build Advisor_Agent, or return None, with a warning, when App_Settings has no API key."""
+def build_agent(settings: Settings) -> tuple[Agent[AdvisorDeps, str] | None, object]:
+    """Build Advisor_Agent and Document_Reader, or (None, None) when no API key is set."""
     if settings.openai_api_key is None:
         logger.warning("agent_disabled", extra={"stage": "agent"})
-        return None
+        return None, None
     with _stage("agent"):
-        return build_advisor(build_model(settings, settings.openai_api_key))
+        model = build_model(settings, settings.openai_api_key)
+        reader = build_reader(model)
+        return build_advisor(model, offer_document_upload=reader is not None), reader
 
 
 def start_services(settings: Settings, config: AppConfig, engine: Engine) -> Services:
@@ -184,9 +188,11 @@ def start_services(settings: Settings, config: AppConfig, engine: Engine) -> Ser
             },
         )
     conversations = ConversationService(sessions, lookup, config)
-    runner = AgentRunner(build_agent(settings), conversations, lookup, config)
+    advisor, reader = build_agent(settings)
+    runner = AgentRunner(advisor, conversations, lookup, config)
     return Services(
-        settings, config, sessions, lookup, conversations, runner, catalog_warnings=tuple(warnings)
+        settings, config, sessions, lookup, conversations, runner,
+        catalog_warnings=tuple(warnings), reader=reader,
     )
 
 
@@ -262,6 +268,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # path. They reach the services through get_services.
     app.include_router(health_router)
     app.include_router(conversations_router)
+    app.include_router(documents_router)
     app.include_router(rep_router)
     return app
 

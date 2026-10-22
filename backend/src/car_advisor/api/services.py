@@ -6,6 +6,9 @@ from typing import cast
 from fastapi import Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from pydantic_ai import Agent
+
+from car_advisor.agent.document_reader import DocumentExtraction
 from car_advisor.agent.runner import AgentRunner
 from car_advisor.conversations.service import ConversationService
 from car_advisor.dataset.lookup import CarLookup, UsageValueMismatch
@@ -23,6 +26,8 @@ class Services:
     runner: AgentRunner
     # The catalog cars whose usage value differs from the dataset, found at startup (Req 4.19).
     catalog_warnings: tuple[UsageValueMismatch, ...] = ()
+    # The Document_Reader agent, None when no API key is set (Req 13).
+    reader: Agent[None, DocumentExtraction] | None = None
 
     @property
     def agent_available(self) -> bool:

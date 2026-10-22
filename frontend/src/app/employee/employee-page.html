@@ -54,6 +54,11 @@
             </div>
           </div>
         </div>
+        @if (store.documentCandidates()) {
+          <app-confirm-form />
+        } @else {
+          <app-upload-button />
+        }
         <app-my-details />
       </section>
 
