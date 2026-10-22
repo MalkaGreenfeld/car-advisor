@@ -398,6 +398,8 @@ def test_the_instructions_state_the_rules_the_design_lists() -> None:
     assert copy_he.OFF_TOPIC_REPLY in INSTRUCTIONS
     assert all(letter in INSTRUCTIONS for letter in copy_he.GROUP_LETTERS.values())
     assert copy_he.COMBINED_FORM_EXAMPLES in INSTRUCTIONS
+    assert copy_he.GENDER_EXAMPLE in INSTRUCTIONS
+    assert copy_he.PRONOUN_EXAMPLE in INSTRUCTIONS
     assert all(term in INSTRUCTIONS for term in copy_he.COMPARISON_TERMS.values())
     for heading in (
         "Ask now",

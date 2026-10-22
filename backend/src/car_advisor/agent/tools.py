@@ -1,7 +1,8 @@
 import functools
+import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Annotated, Any, Concatenate, Final, Literal, Self
 from uuid import UUID
@@ -74,6 +75,9 @@ class AdvisorDeps:
     conversations: ConversationService
     lookup: CarLookup
     config: AppConfig
+    # Keys returned by lookup_car in this agent run. update_profile rejects a current_car_key
+    # that appears here, because the employee has not yet confirmed the candidate (F-3 guard).
+    lookup_keys_this_run: set[CarKey] = field(default_factory=set)
 
 
 class _Result(BaseModel, frozen=True):
@@ -420,12 +424,48 @@ def lookup_car(
         model_code: The model code, as text with its leading zeros.
     """
     lookup = ctx.deps.lookup
+    result: LookupToolResult
     if any(_given(code) for code in (vehicle_type_code, manufacturer_code, model_code)):
+        # F-2: with only model_code and a search_text, run the name search and keep candidates
+        # that match the model code, instead of ignoring search_text.
+        if (
+            _given(model_code)
+            and not _given(vehicle_type_code)
+            and not _given(manufacturer_code)
+            and search_text
+            and registration_year is not None
+        ):
+            search_result = _lookup_result(lookup.search(registration_year, search_text))
+            if isinstance(search_result, CarCandidates) and not search_result.none_found:
+                filtered = [c for c in search_result.candidates if c.model_code == model_code]
+                if filtered:
+                    result = CarCandidates(
+                        match_count=len(filtered),
+                        candidates=filtered,
+                        selection_required=len(filtered) > 1,
+                        none_found=False,
+                        truncated=False,
+                    )
+                    _track_keys(ctx, result)
+                    return result
         parts = KeyParts(
             lookup.tax_year, registration_year, vehicle_type_code, manufacturer_code, model_code
         )
-        return _lookup_result(lookup.get(parts))
-    return _lookup_result(lookup.search(registration_year, search_text))
+        result = _lookup_result(lookup.get(parts))
+    else:
+        result = _lookup_result(lookup.search(registration_year, search_text))
+    _track_keys(ctx, result)
+    return result
+
+
+def _track_keys(ctx: RunContext[AdvisorDeps], result: LookupToolResult) -> None:
+    """Record keys that lookup_car returned so the confirmation guard can block them."""
+    keys = ctx.deps.lookup_keys_this_run
+    if isinstance(result, FoundCar):
+        keys.add(result.car.car_key)
+    elif isinstance(result, CarCandidates):
+        for candidate in result.candidates:
+            keys.add(candidate.car_key)
 
 
 @logged_tool
@@ -589,7 +629,23 @@ def ask_rep(
 def _given_fields(changes: ProfileChanges) -> dict[str, object]:
     values = {name: getattr(changes, name) for name in changes.model_fields_set}
     # A null is the model filling in a field it has nothing for, not a request to clear the field.
-    return {name: value for name, value in values.items() if value is not None}
+    return {name: _clean_numeric(value) for name, value in values.items() if value is not None}
+
+
+_GROUPED_NUMBER = re.compile(r"^\d{1,3}(,\d{3})+(\.\d+)?$")
+# A trailing percent sign, shekel sign, or leading shekel sign that the model copies from the
+# employee's message (e.g. "6%" or "₪18,500").
+_UNIT_CHARS = re.compile(r"^[₪\s]+|[₪%\s]+$")
+
+
+def _clean_numeric(value: object) -> object:
+    """Strip units and thousands commas so Decimal validation accepts what the model sends."""
+    if not isinstance(value, str):
+        return value
+    cleaned = _UNIT_CHARS.sub("", value)
+    if _GROUPED_NUMBER.fullmatch(cleaned):
+        cleaned = cleaned.replace(",", "")
+    return cleaned if cleaned else value
 
 
 def _is_in_dataset(lookup: CarLookup, value: object) -> bool:
@@ -621,6 +677,23 @@ def update_profile(ctx: RunContext[AdvisorDeps], changes: ProfileChanges) -> Pro
         unconfirmed.append(
             FieldError(_CURRENT_CAR_KEY, copy_he.PROFILE_FIELD_RANGES[_CURRENT_CAR_KEY])
         )
+    # F-3 guard: a key that lookup_car returned in this same agent run has not been confirmed by
+    # the employee yet (confirmation needs a new message). Reject it so the model shows the
+    # candidate and asks for confirmation first.
+    if _CURRENT_CAR_KEY in requested:
+        try:
+            key = CarKey.model_validate(requested[_CURRENT_CAR_KEY])
+        except ValidationError:
+            key = None
+        if key is not None and key in deps.lookup_keys_this_run:
+            del requested[_CURRENT_CAR_KEY]
+            unconfirmed.append(
+                FieldError(
+                    _CURRENT_CAR_KEY,
+                    "The employee must confirm the candidate before it is saved. "
+                    "Show the candidate and ask the employee to confirm.",
+                )
+            )
     update = deps.conversations.update_profile_partial(deps.conversation_id, requested)
     stored = update.profile.model_dump(mode="json")
     return ProfileUpdateResult(

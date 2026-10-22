@@ -30,6 +30,9 @@ export const FIELD_NAMES = Object.keys(FIELD_KINDS) as DetailsFieldName[];
 const PLAIN_DECIMAL = /^\d+(\.\d+)?$/;
 const GROUPED_DECIMAL = /^\d{1,3}(,\d{3})+(\.\d+)?$/;
 const WHOLE_NUMBER = /^\d+$/;
+// Employees type the unit with the number, as on a payslip: ₪18,000 or 6%.
+const SHEKEL_SIGN = /^₪\s*|\s*₪$/g;
+const PERCENT_SIGN = /\s*%$/;
 
 export function isDetailsField(name: string): name is DetailsFieldName {
   return Object.hasOwn(FIELD_KINDS, name);
@@ -45,10 +48,11 @@ export function parseValue(kind: FieldKind, text: string): FieldValue | undefine
     case 'yes_no':
       return trimmed === 'yes' || trimmed === 'no' ? trimmed === 'yes' : undefined;
     case 'amount':
+      return parseDecimal(trimmed.replace(SHEKEL_SIGN, ''));
     case 'points':
       return parseDecimal(trimmed);
     case 'percent': {
-      const percent = parseDecimal(trimmed);
+      const percent = parseDecimal(trimmed.replace(PERCENT_SIGN, ''));
       return percent !== undefined && atMostHundred(percent) ? percent : undefined;
     }
     case 'count':

@@ -1,19 +1,32 @@
-import { Component, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { ApiClient, ApiError } from '../shared/api';
 import { sharedCopy } from '../shared/shared.copy';
 import { Chat } from './chat/chat';
-import { ComparisonTable } from './comparison/comparison-table';
+import { ComparisonSummary } from './comparison/comparison-summary';
 import { EmployeeStore } from './employee-store';
 import { employeeCopy } from './employee.copy';
 import { MyDetails } from './my-details/my-details';
 
 type LoadStatus = 'loading' | 'ready' | 'not_found' | 'failed';
 
+// The fields from the profile that count toward "filled".
+const TRACKED_FIELDS = [
+  'occupation',
+  'base_salary',
+  'pension_rate_percent',
+  'study_fund_rate_percent',
+  'credit_points',
+  'has_current_car',
+  'children_under_23',
+  'display_name',
+  'pay_components',
+] as const;
+
 @Component({
   selector: 'app-employee-page',
-  imports: [Chat, ComparisonTable, MyDetails],
+  imports: [Chat, ComparisonSummary, MyDetails],
   providers: [EmployeeStore],
   templateUrl: './employee-page.html',
   styleUrl: './employee-page.scss',
@@ -28,11 +41,34 @@ export class EmployeePage {
   readonly conversationId = input<string>();
 
   protected readonly status = signal<LoadStatus>('loading');
-  // The router reuses this page when only the ID changes, and a late response of an earlier ID, or
-  // of a page that is gone, must not change what the screen shows.
   private generation = 0;
-  // Repeated clicks are ignored rather than disabling the button, which would drop its focus.
   private creating = false;
+
+  // Progress indicator: how many of the tracked fields have a value.
+  private readonly filledCount = computed(() => {
+    const profile = this.store.state()?.profile;
+    if (!profile) {
+      return 0;
+    }
+    let count = 0;
+    for (const field of TRACKED_FIELDS) {
+      const value = profile[field];
+      if (value !== null && value !== undefined) {
+        count++;
+      }
+    }
+    return count;
+  });
+
+  protected readonly detailsProgress = computed(() => {
+    const filled = this.filledCount();
+    const total = TRACKED_FIELDS.length;
+    return `${filled} מתוך ${total}`;
+  });
+
+  protected readonly detailsPercent = computed(() => {
+    return Math.round((this.filledCount() / TRACKED_FIELDS.length) * 100);
+  });
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -90,8 +126,6 @@ export class EmployeePage {
         throw failure;
       }
       if (generation === this.generation) {
-        // A 404 is a conversation that does not exist, also when the path is one that no route matches,
-        // such as an ID with an encoded slash (Req 11.11).
         const missing = failure.status === 404 || failure.code === 'conversation_not_found';
         this.status.set(missing ? 'not_found' : 'failed');
       }

@@ -163,6 +163,7 @@ describe('AnswerForm', () => {
       ['a negative amount', 'amount', '-1', '2026-01-01', copy.errors.amount],
       ['an amount that is not a number', 'amount', 'abc', '2026-01-01', copy.errors.amount],
       ['an amount with three decimals', 'amount', '12.345', '2026-01-01', copy.errors.amount],
+      ['an amount with misplaced commas', 'amount', '1,35', '2026-01-01', copy.errors.amount],
       ['a missing date', 'effective_date', '350', '', copy.errors.effective_date],
     ])(
       'rejects %s next to the field and sends nothing',
@@ -213,6 +214,18 @@ describe('AnswerForm', () => {
         },
       });
       expect(answered).toHaveBeenCalledExactlyOnceWith(answeredView());
+    });
+
+    it('sends an amount written with thousands commas in its plain form', async () => {
+      api.answerRepQuestion.mockResolvedValue(answeredView());
+      await open();
+      await fillParticipation('1,350.50', '2026-01-01');
+
+      await submit();
+
+      expect(api.answerRepQuestion).toHaveBeenCalledExactlyOnceWith(ID, {
+        participation: { amount: '1350.50', effective_date: '2026-01-01' },
+      });
     });
 
     it('leaves the note out of the request when it is blank', async () => {

@@ -3,7 +3,7 @@
 name: car-advisor
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04
+    image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
@@ -11,7 +11,7 @@ services:
     ports: ["127.0.0.1:1433:1433"]
     volumes: ["mssql-data:/var/opt/mssql"]
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null || /opt/mssql-tools/bin/sqlcmd -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null"]
       start_period: 30s
       interval: 5s
       timeout: 5s

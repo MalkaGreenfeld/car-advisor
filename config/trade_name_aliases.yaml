@@ -1,0 +1,21 @@
+# Hebrew names that employees type, mapped to the Latin trade name in the Usage_Value_Dataset.
+# The lookup tries the alias when the original text finds nothing. The longest match wins, so
+# "קורולה קרוס" is tried before "קורולה".
+aliases:
+  "קורולה קרוס": "COROLLA CROSS"
+  "קורולה": "COROLLA"
+  "יאריס קרוס": "YARIS CROSS"
+  "יאריס": "YARIS"
+  "טוסון": "TUCSON"
+  "נירו": "NIRO"
+  "אוקטביה": "OCTAVIA"
+  "ספורטאז'": "SPORTAGE"
+  "קרניבל": "CARNIVAL"
+  "סנטה פה": "SANTA FE"
+  "פיקנטו": "PICANTO"
+  "מאזדה": "MAZDA"
+  "טסלה": "TESLA"
+  "מודל 3": "MODEL 3"
+  "דולפין": "DOLPHIN"
+  "לאון": "LEON"
+  "קונה": "KONA"

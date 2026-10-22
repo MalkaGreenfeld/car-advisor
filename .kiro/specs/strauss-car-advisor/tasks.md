@@ -1257,6 +1257,55 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
     - _Requirements: 15.5, 17.10, 17.13_
     - **Note:** `test_docs.py` (12 passed), ruff check, ruff format, pytest (1285 passed), ng lint, ng test (416 passed) and prettier (with `--end-of-line auto`) all pass individually. `./check.sh` as a single script was not run because of Windows-only issues (Hebrew path crashes Vitest, 2 known test failures, CRLF line endings). Deferred to cloud/Linux.
 
+- [ ] 19. Fix the live-run findings (2026-10-21)
+  - `docs/live-run-findings.md` holds the evidence and the verdict of each finding (code, prompt or model). Each subtask names its finding; read it there first.
+  - Do the code subtasks (19.1-19.3) before the prompt subtask (19.4), so that the live rerun in 19.6 tests both.
+  - On Windows, run the checks one by one as in the note of 18.6, not `./check.sh`.
+
+  - [ ] 19.1 Make the car search find what employees type (F-1 and F-2, code)
+    - F-1: a small Hebrew to Latin alias table for common trade names, in a config file next to the catalog (for example `config/trade_name_aliases.yaml`: "קורולה קרוס" → "COROLLA CROSS", "קורולה" → "COROLLA", "טוסון" → "TUCSON", "נירו" → "NIRO", "אוקטביה" → "OCTAVIA", "מודל 3" → "MODEL 3", and the other catalog cars). `car_advisor/dataset/lookup.py` `search`: when the text matches an alias, also search with its Latin name. The longest alias wins, so "קורולה קרוס" is not read as "קורולה"
+    - F-2: `car_advisor/agent/tools.py` `lookup_car`: with `model_code` and `search_text` but no manufacturer code, run the name search and keep the candidates with that model code, instead of ignoring `search_text`
+    - Tests: `tests/dataset/`: "קורולה קרוס" in 2025 finds the COROLLA CROSS candidates, an unknown Hebrew name still finds nothing; `tests/agent/test_tools.py`: "COROLLA CROSS" with model code 00296 returns only candidates with that code, and the full codes still read the one exact car
+    - _Requirements: 2 (car identification), 9.8_
+
+  - [ ] 19.2 Require the employee's confirmation before the current car is saved (F-3, code guard)
+    - `car_advisor/agent/tools.py` `update_profile`: reject `current_car_key` when `lookup_car` returned that key in the same agent run, with a rejection that says the employee must confirm the candidate first
+    - Tests: `tests/agent/test_tools.py` for the rejection and for a key saved in the next run; `tests/agent/test_scenarios.py` still passes
+    - _Requirements: 9.8_
+
+  - [ ] 19.3 Verify the unit and comma fixes in the forms (F-6, code, already written)
+    - Already changed: `employee/my-details/field-values.ts` (₪ and %), `rep/answer-values.ts` and `rep/answer-form.ts` (thousands commas), with cases in `field-values.spec.ts` and `answer-form.spec.ts`
+    - Run ng lint, ng test and prettier for the frontend; fix what fails
+    - By hand after the rebuild: "18,000", "₪18,000" and "6%" in My Details, "1,350" on `/rep`. Record which field rejected "18,000" in the findings file
+    - _Requirements: 11.3, 12.7_
+
+  - [ ] 19.4 Tighten the agent instructions (F-1, F-3, F-4, prompt)
+    - `car_advisor/agent/advisor.py`:
+      - F-1: when a name finds nothing, search again in the same turn with the other spelling before replying (a fallback for names that the alias table of 19.1 does not have)
+      - F-3: a named alternative is first looked up with `list_catalog_cars`, and only a car that is not there is treated as outside the catalog; a single candidate is always shown and confirmed before it is saved
+      - F-4: address the employee in the gender they used about themselves, and in the combined form until they have shown one; never infer it from a name (Requirement 9.10 as changed on 21/10/2026)
+    - Tests: `tests/agent/test_advisor.py` for the new instruction sentences; all `tests/agent` pass
+    - _Requirements: 9.1, 9.8, 9.10_
+
+  - [ ] 19.5 Reduce the response time (F-5, prompt, then model choice)
+    - `car_advisor/agent/advisor.py`: shorter comparison replies (the table shows the breakdown), independent tool calls in one response
+    - Measure the `agent_turn` durations in the rerun. If fewer than 90% of turns are under 8 s, try a faster `LLM_MODEL` only if time allows; otherwise record it in the findings file and in the submission summary of `docs/explanations.he.md` as a known limitation
+    - _Requirements: 9.11, 9.12_
+
+  - [ ] 19.6 Rerun the live checks and record them
+    - Run 16.2 and 16.3 again, including the six sample questions and E-001 with the Hebrew car name
+    - Update `docs/live-run-findings.md`: the result of each finding after the fix, and the new durations. Keep the file as the record of the live checks
+    - Then mark 16.2 and 16.3
+    - _Requirements: 9.11, 9.12_
+
+- [ ]* 20. Gross up the EV refund (optional, only if task 19 is done and time is left)
+  - [ ]* 20.1 Add `ev_refund.mode: gross_up`
+    - `config/rules.yaml` and `car_advisor/engine/config.py`: the new mode
+    - `car_advisor/engine/payroll.py`: find the gross amount that raises net pay by exactly `ev_refund.amount`, add it to taxable gross, and show it in the breakdown
+    - Tests: the challenge employees with an electric alternative (E-001, E-003, E-004, E-006) match the sheet's income tax and insurance too, so `after_taxes_include_gross_up` is no longer needed in `tests/fixtures/challenge/employees.yaml`; net pay stays the same
+    - `docs/explanations.he.md`: the mode, and the comparison with the sheet in section 5
+    - _Requirements: 7.5_
+
 ## Notes
 
 - Tasks marked `*` are optional: Requirement 13 (document upload) and the property-based tests. Every other task is required, including all unit tests and the challenge rule examples.
@@ -1331,10 +1380,16 @@ Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (docu
     { "id": 57, "tasks": ["18.4"] },
     { "id": 58, "tasks": ["18.5"] },
     { "id": 59, "tasks": ["18.6"] },
-    { "id": 60, "tasks": ["16.2"] },
-    { "id": 61, "tasks": ["16.3"] },
-    { "id": 62, "tasks": ["16.4", "16.5"] },
-    { "id": 63, "tasks": ["16.6"] }
+    { "id": 60, "tasks": ["19.1", "19.3"] },
+    { "id": 61, "tasks": ["19.2"] },
+    { "id": 62, "tasks": ["19.4"] },
+    { "id": 63, "tasks": ["19.5"] },
+    { "id": 64, "tasks": ["16.2"] },
+    { "id": 65, "tasks": ["16.3"] },
+    { "id": 66, "tasks": ["19.6"] },
+    { "id": 67, "tasks": ["16.4", "16.5"] },
+    { "id": 68, "tasks": ["16.6"] },
+    { "id": 69, "tasks": ["20.1"] }
   ]
 }
 ```

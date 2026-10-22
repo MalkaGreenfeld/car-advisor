@@ -17,25 +17,27 @@
 }
 
 .message {
-  max-inline-size: 80%;
+  max-inline-size: 75%;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   line-height: 1.6;
   animation: fadeIn var(--transition-normal) ease;
   position: relative;
 
+  // Bot/advisor on the LEFT (flex-start in RTL = left side visually)
   &[data-role='advisor'] {
-    align-self: flex-start;
+    align-self: flex-end;
     background: var(--color-bubble-bot);
-    border-end-start-radius: var(--radius-sm);
+    border-end-end-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
   }
 
+  // Employee on the RIGHT (flex-end in RTL = right side visually)
   &[data-role='employee'] {
-    align-self: flex-end;
+    align-self: flex-start;
     background: var(--color-bubble-user);
     color: var(--color-bubble-user-text);
-    border-end-end-radius: var(--radius-sm);
+    border-end-start-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
 
     .sender {
@@ -76,7 +78,6 @@
 
 .text {
   margin: 0;
-  // The newlines of a message stay, and a long key breaks instead of widening the page.
   white-space: pre-line;
   overflow-wrap: anywhere;
 }

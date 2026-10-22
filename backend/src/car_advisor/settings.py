@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     rules_path: Path = Path("../config/rules.yaml")
     catalog_path: Path = Path("../config/car_catalog.yaml")
     occupations_path: Path = Path("../config/occupations.yaml")
+    aliases_path: str | None = "../config/trade_name_aliases.yaml"
+    aliases_path: str | None = "../config/trade_name_aliases.yaml"
 
 
 def settings_error_fields(error: ValidationError) -> list[str]:

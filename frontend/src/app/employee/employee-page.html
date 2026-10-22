@@ -1,7 +1,12 @@
 <main class="employee-page">
   <header class="page-header">
-    <h1>{{ copy.page.title }}</h1>
-    <button type="button" (click)="startNew()">{{ copy.page.newConversation }}</button>
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">🚗</span>
+      <h1>{{ copy.page.title }}</h1>
+    </div>
+    <button type="button" class="new-conversation" (click)="startNew()">
+      {{ copy.newConversationLabel }}
+    </button>
   </header>
 
   <div class="notice" aria-live="assertive" aria-atomic="true">
@@ -39,20 +44,30 @@
 
   @if (status() === 'ready') {
     <div class="layout">
-      <section class="area chat" aria-labelledby="chat-heading">
-        <h2 id="chat-heading">{{ copy.chat.heading }}</h2>
-        <app-chat />
-      </section>
-
       <section class="area details" aria-labelledby="details-heading">
-        <h2 id="details-heading">{{ copy.details.heading }}</h2>
+        <div class="details-header">
+          <h2 id="details-heading">{{ copy.details.heading }}</h2>
+          <div class="progress" aria-hidden="true">
+            <span class="progress-text">{{ detailsProgress() }}</span>
+            <div class="progress-bar">
+              <div class="progress-fill" [style.width.%]="detailsPercent()"></div>
+            </div>
+          </div>
+        </div>
         <app-my-details />
       </section>
 
-      <section class="area comparison" aria-labelledby="comparison-heading">
-        <h2 id="comparison-heading">{{ copy.comparison.heading }}</h2>
-        <app-comparison-table />
-      </section>
+      <div class="main-column">
+        <section class="area summary-area" aria-labelledby="comparison-heading">
+          <h2 id="comparison-heading" class="visually-hidden">{{ copy.comparison.heading }}</h2>
+          <app-comparison-summary />
+        </section>
+
+        <section class="area chat" aria-labelledby="chat-heading">
+          <h2 id="chat-heading">{{ copy.chat.heading }}</h2>
+          <app-chat />
+        </section>
+      </div>
     </div>
   }
 </main>

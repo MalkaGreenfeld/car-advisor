@@ -14,7 +14,7 @@ import { FormField } from '@angular/forms/signals';
 import { ApiClient, ApiError } from '../shared/api';
 import { RepAnswerRequest, RepQuestionView } from '../shared/api-models';
 import { formatShekels } from '../shared/format';
-import { AnswerFieldName, AnswerFormState, AnswerValues } from './answer-values';
+import { AnswerFieldName, AnswerFormState, AnswerValues, amountOf } from './answer-values';
 import { repCopy } from './rep.copy';
 
 const copy = repCopy.answer;
@@ -161,7 +161,8 @@ export class AnswerForm {
     const note = values.note.trim();
     return {
       participation: {
-        amount: values.amount.trim(),
+        // Validation passed, so the amount has a plain form.
+        amount: amountOf(values.amount) ?? values.amount.trim(),
         effective_date: values.effective_date,
         ...(note === '' ? {} : { note }),
       },

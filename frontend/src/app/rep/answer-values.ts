@@ -32,6 +32,8 @@ export const TEXT_MAX_LENGTH = 2000;
 const errors = repCopy.answer.errors;
 // DECIMAL(12,2): up to ten digits, and two after the point.
 const AMOUNT = /^\d{1,10}(?:\.\d{1,2})?$/;
+// The same amount with thousands commas, as amounts are written: 1,350.
+const GROUPED_AMOUNT = /^\d{1,3}(?:,\d{3}){1,3}(?:\.\d{1,2})?$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function answerKindOf(question: RepQuestionView): AnswerKind {
@@ -54,7 +56,20 @@ export function initialValuesOf(question: RepQuestionView): Partial<AnswerValues
 }
 
 export function isAmount(text: string): boolean {
-  return AMOUNT.test(text.trim());
+  return amountOf(text) !== undefined;
+}
+
+// The plain form that the server reads as a Decimal, or undefined for text it would reject.
+export function amountOf(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (AMOUNT.test(trimmed)) {
+    return trimmed;
+  }
+  if (GROUPED_AMOUNT.test(trimmed)) {
+    const plain = trimmed.replaceAll(',', '');
+    return AMOUNT.test(plain) ? plain : undefined;
+  }
+  return undefined;
 }
 
 // The date input only holds a real date or nothing, but the text may come from anywhere.

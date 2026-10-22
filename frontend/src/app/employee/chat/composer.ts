@@ -21,12 +21,20 @@ export class Composer {
 
   private readonly textarea = viewChild.required<ElementRef<HTMLTextAreaElement>>('textarea');
 
+  protected autoGrow(element: HTMLTextAreaElement): void {
+    element.style.height = 'auto';
+    element.style.height = `${element.scrollHeight}px`;
+  }
+
   protected submit(): void {
     // A button that turns disabled under a click drops the focus, so it goes back to the field.
-    this.textarea().nativeElement.focus();
+    const textarea = this.textarea().nativeElement;
+    textarea.focus();
     const text = this.draft().trim();
     if (text !== '' && !this.sendDisabled()) {
       this.submitted.emit(text);
+      // Reset height after send.
+      textarea.style.height = 'auto';
     }
   }
 }

@@ -1,4 +1,5 @@
 export const employeeCopy = {
+  newConversationLabel: '+ שיחה חדשה',
   page: {
     title: 'יועץ הרכב',
     newConversation: 'שיחה חדשה',

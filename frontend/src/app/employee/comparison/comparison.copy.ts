@@ -75,4 +75,16 @@ export const comparisonCopy = {
   catalogParticipationNote:
     'ההשתתפות ברכב חדש מוצגת לפי הקטלוג. הסכום הסופי נקבע מול נציג התחבורה.',
   effectiveFrom: 'בתוקף מתאריך',
+  // The strip above the chat, which sums up the comparison and opens the full table.
+  summary: {
+    empty: 'ההשוואה תופיע אחרי שיוזנו הנתונים הראשונים',
+    noAlternatives: 'עוד לא נבדקה חלופה. אפשר לבקש מהיועץ לבדוק רכב',
+    missing: 'חסרים {count} נתונים להשלמת ההשוואה',
+    missingOne: 'חסר נתון אחד להשלמת ההשוואה',
+    ready: 'ההשוואה מוכנה',
+    todayNet: 'נטו היום',
+    open: 'להשוואה המלאה',
+    close: 'סגירה',
+    dialogTitle: 'השוואת החלופות',
+  },
 } as const;

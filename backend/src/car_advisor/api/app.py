@@ -45,6 +45,26 @@ from car_advisor.settings import Settings, settings_error_fields
 logger = logging.getLogger(__name__)
 
 
+def _load_aliases(path: str | None) -> dict[str, str]:
+    """Load the Hebrew to Latin trade name aliases, or return an empty dict."""
+    if path is None:
+        return {}
+    from pathlib import Path as _Path
+
+    import yaml as _yaml
+
+    resolved = _Path(path)
+    if not resolved.is_file():
+        return {}
+    try:
+        data = _yaml.safe_load(resolved.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(data, dict) and isinstance(data.get("aliases"), dict):
+        return {str(k): str(v) for k, v in data["aliases"].items()}
+    return {}
+
+
 class SettingsError(Exception):
     """App_Settings are invalid. It names the variables and never a value."""
 
@@ -145,7 +165,8 @@ def build_agent(settings: Settings) -> Agent[AdvisorDeps, str] | None:
 def start_services(settings: Settings, config: AppConfig, engine: Engine) -> Services:
     """Run the stages that need the database, then wire the services around it."""
     sessions = make_session_factory(engine)
-    lookup = CarLookup(sessions, settings.tax_year)
+    aliases = _load_aliases(settings.aliases_path)
+    lookup = CarLookup(sessions, settings.tax_year, trade_name_aliases=aliases)
     import_dataset_if_missing(sessions, settings)
     with _stage("catalog_check"):
         warnings = check_catalog(lookup, config.catalog)

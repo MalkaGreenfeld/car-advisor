@@ -1,0 +1,51 @@
+<div class="strip" [attr.data-state]="state()">
+  <p class="message" role="status">
+    <span class="dot" aria-hidden="true"></span>
+    {{ message() }}
+  </p>
+
+  @if (todayNet() !== null || chips().length > 0) {
+    <ul class="chips">
+      @if (todayNet() !== null) {
+        <li class="chip today">
+          <span class="chip-title">{{ copy.summary.todayNet }}</span>
+          <span class="chip-value"><app-amount [value]="todayNet()" /></span>
+        </li>
+      }
+      @for (chip of chips(); track chip.id) {
+        <li class="chip" [attr.data-status]="chip.status">
+          <span class="chip-title">
+            {{ chip.title }} · <app-bidi-text [text]="chip.car" />
+          </span>
+          <span class="chip-value">
+            @if (chip.status === 'calculated' && chip.difference !== null) {
+              <app-amount [value]="chip.difference" [signed]="true" />
+            } @else {
+              {{ copy.status[chip.status] }}
+            }
+          </span>
+        </li>
+      }
+    </ul>
+  }
+
+  <button
+    type="button"
+    class="open-btn button-primary"
+    [class.attention]="attention()"
+    aria-haspopup="dialog"
+    (click)="open()"
+  >
+    {{ copy.summary.open }}
+  </button>
+</div>
+
+<dialog #dialog class="dialog" aria-labelledby="comparison-dialog-title">
+  <div class="dialog-header">
+    <h3 id="comparison-dialog-title">{{ copy.summary.dialogTitle }}</h3>
+    <button type="button" class="close-btn" aria-label="סגירה" (click)="close()">✕</button>
+  </div>
+  <div class="dialog-body">
+    <app-comparison-table />
+  </div>
+</dialog>

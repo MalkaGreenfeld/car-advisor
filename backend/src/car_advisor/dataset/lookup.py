@@ -1,5 +1,5 @@
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -153,9 +153,23 @@ def _candidate(row: Row[Any]) -> CarCandidate:
 
 
 class CarLookup:
-    def __init__(self, sessions: sessionmaker[Session], tax_year: int) -> None:
+    def __init__(
+        self,
+        sessions: sessionmaker[Session],
+        tax_year: int,
+        *,
+        trade_name_aliases: Mapping[str, str] | None = None,
+    ) -> None:
         self._sessions = sessions
         self.tax_year = tax_year
+        # Sorted longest first so "קורולה קרוס" wins over "קורולה".
+        self._aliases: tuple[tuple[str, str], ...] = tuple(
+            sorted(
+                ((k.strip().upper(), v.strip()) for k, v in (trade_name_aliases or {}).items()),
+                key=lambda pair: len(pair[0]),
+                reverse=True,
+            )
+        )
 
     def get(self, parts: KeyParts) -> Found | NotFound | Rejected | LookupFailed:
         text = {name: _text(part) for name, part in asdict(parts).items()}
@@ -220,7 +234,21 @@ class CarLookup:
                 items = tuple(_candidate(row) for row in session.execute(query))
         except SQLAlchemyError as error:
             return _failed(error)
+
+        # When the original text found nothing, try the Hebrew-to-Latin alias table (F-1).
+        if not items:
+            alias = self._resolve_alias(needle)
+            if alias is not None:
+                return self.search(registration_year, alias)
+
         return Candidates(items, selection_required=len(items) > 1, none_found=not items)
+
+    def _resolve_alias(self, needle: str) -> str | None:
+        upper = needle.upper()
+        for hebrew, latin in self._aliases:
+            if hebrew in upper:
+                return latin
+        return None
 
     def _fetch(self, keys: list[CarKey]) -> dict[CarKey, CarRecord]:
         records: dict[CarKey, CarRecord] = {}

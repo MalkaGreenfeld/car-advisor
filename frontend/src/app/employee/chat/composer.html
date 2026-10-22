@@ -1,23 +1,22 @@
-<form (submit)="$event.preventDefault(); submit()">
-  <div class="field">
-    <label for="chat-message">{{ copy.messageLabel }}</label>
-    <textarea
-      #textarea
-      id="chat-message"
-      rows="3"
-      aria-describedby="chat-message-hint"
-      [maxLength]="maxLength"
-      [placeholder]="copy.placeholder"
-      [readOnly]="locked()"
-      [value]="draft()"
-      (input)="draft.set(textarea.value)"
-      (keydown.enter)="$event.preventDefault(); submit()"
-    ></textarea>
-  </div>
-  <div class="actions">
-    <p id="chat-message-hint" class="hint">{{ copy.hint }}</p>
-    <button type="submit" class="button-primary" [disabled]="sendDisabled()">
-      {{ copy.send }}
-    </button>
-  </div>
+<form class="composer-bar" (submit)="$event.preventDefault(); submit()">
+  <label for="chat-message" class="visually-hidden">{{ copy.messageLabel }}</label>
+  <textarea
+    #textarea
+    id="chat-message"
+    rows="1"
+    aria-describedby="chat-message-hint"
+    [maxLength]="maxLength"
+    [placeholder]="copy.placeholder"
+    [readOnly]="locked()"
+    [value]="draft()"
+    (input)="draft.set(textarea.value); autoGrow(textarea)"
+    (keydown.enter)="$event.preventDefault(); submit()"
+  ></textarea>
+  <button type="submit" class="send-btn" [disabled]="sendDisabled()" [attr.aria-label]="copy.send">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="22" y1="2" x2="11" y2="13"></line>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+    </svg>
+  </button>
 </form>
+<p id="chat-message-hint" class="hint">{{ copy.hint }}</p>

@@ -222,6 +222,12 @@ def rep_question_not_sent(label: str) -> str:
 # (Req 9.13). It holds no number, so the number guard lets it through without a tool result.
 OFF_TOPIC_REPLY = "אני כאן כדי לעזור רק בשאלות על רכב החברה ועל הנטו."
 
+# Example of avoiding word repetition in a sentence (Req 9.10, tone).
+PRONOUN_EXAMPLE = "ומה ההשתתפות שלך בו"
+
+# Example of a feminine gendered form for the gender instruction (Req 9.10).
+GENDER_EXAMPLE = "אני מנהלת"
+
 # Examples of the combined feminine/masculine forms that the employee is addressed in (Req 9.10).
 COMBINED_FORM_EXAMPLES = "את/ה, בחר/י, מעוניין/ת"
 

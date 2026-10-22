@@ -1,0 +1,197 @@
+:host {
+  display: block;
+}
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: border-color var(--transition-normal), background var(--transition-normal);
+
+  &[data-state='ready'] {
+    border-color: var(--color-increase);
+    background: rgb(26 107 60 / 0.04);
+  }
+
+  &[data-state='missing'] {
+    border-color: #d4a72c;
+    background: rgb(212 167 44 / 0.04);
+  }
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  transition: background var(--transition-normal), box-shadow var(--transition-normal);
+
+  [data-state='ready'] & {
+    background: var(--color-increase);
+    box-shadow: 0 0 0 4px rgb(26 107 60 / 0.15);
+  }
+
+  [data-state='missing'] & {
+    background: #d4a72c;
+    box-shadow: 0 0 0 4px rgb(212 167 44 / 0.15);
+  }
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  flex: 1;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3);
+  min-inline-size: 9rem;
+  flex-shrink: 0;
+}
+
+.chip-title {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.chip-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.open-btn {
+  flex-shrink: 0;
+  border-radius: 999px !important;
+  padding: var(--space-2) var(--space-5) !important;
+  font-weight: 600;
+  white-space: nowrap;
+
+  &.attention {
+    animation: pulse 2s infinite;
+  }
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(29 79 145 / 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgb(29 79 145 / 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(29 79 145 / 0);
+  }
+}
+
+// Dialog: hidden by default, shown only when the browser adds [open] via showModal().
+.dialog {
+  // The browser hides <dialog> without [open], but an explicit display value overrides that.
+  // So we only set display when [open] is present.
+  &:not([open]) {
+    display: none;
+  }
+
+  &[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  position: fixed;
+  inset: 4vh 2.5vw;
+  max-inline-size: none;
+  max-block-size: none;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.25);
+  overflow: hidden;
+
+  &::backdrop {
+    background: rgb(15 23 42 / 0.45);
+    backdrop-filter: blur(2px);
+  }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-block-end: var(--border);
+  flex-shrink: 0;
+
+  h3 {
+    margin: 0;
+    font-size: 1.125rem;
+  }
+}
+
+.close-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 1.125rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--color-surface-muted);
+  }
+}
+
+.dialog-body {
+  overflow: auto;
+  padding: var(--space-4);
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .strip {
+    flex-wrap: wrap;
+  }
+
+  .chips {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .dialog {
+    inset: 0;
+    border-radius: 0;
+  }
+}
