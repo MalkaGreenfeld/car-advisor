@@ -3,7 +3,8 @@
 name: car-advisor
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2025-CU9-ubuntu-24.04
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
@@ -11,13 +12,14 @@ services:
     ports: ["127.0.0.1:1433:1433"]
     volumes: ["mssql-data:/var/opt/mssql"]
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null || /opt/mssql-tools/bin/sqlcmd -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -o /dev/null"]
       start_period: 30s
       interval: 5s
       timeout: 5s
       retries: 18
   backend:
     build: ./backend
+    restart: unless-stopped
     env_file: .env
     environment:
       DB_HOST: db
@@ -29,10 +31,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports: ["127.0.0.1:8000:8000"]
+    ports: ["0.0.0.0:8000:8000"]
     # The image has no curl. urlopen raises on a 503, so the check fails until the database is
     # reachable and the dataset is loaded. The first start imports the dataset (1.5 to 3.5
-    # minutes) before the app accepts connections, hence the long start_period.
+    # minutes) before the app acceptsctions, hence the long start_period.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       start_period: 300s
@@ -41,12 +43,13 @@ services:
       retries: 6
   frontend:
     build: ./frontend
+    restart: unless-stopped
     # Without the condition the page would open while the first import is still running.
     depends_on:
       backend:
         condition: service_healthy
     # The container port is 8080 as well, see frontend/nginx.conf.
-    ports: ["127.0.0.1:8080:8080"]
+    ports: ["0.0.0.0:8080:8080"]
     # Only checks that nginx serves the page. It does not go through the backend.
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
