@@ -149,3 +149,5 @@ TEST_MSSQL_URL='mssql+mssqlpython://sa:<DB_PASSWORD>@127.0.0.1:1433/master' uv r
 | Backend code | `backend/src/car_advisor/` |
 | Frontend code | `frontend/src/app/` |
 | Explanations in Hebrew, with the submission summary and the open questions | `docs/explanations.he.md` |
+| Requirements, design and implementation plan | `docs/requirements.md`, `docs/design.md`, `docs/tasks.md` |
+| Live run findings (test results with the real model) | `docs/live-run-findings.md` |
