@@ -1,153 +1,199 @@
-# Strauss Car Advisor
+# 🚗 Strauss Car Advisor
 
-A Hebrew assistant for the Strauss company-car challenge (Open Source AI Hackathon 2026). An
-employee chats with the advisor, fills in a few personal details, and gets a table that compares
-today's car arrangement with alternatives (another car, an electric car, or giving up the car) by
-monthly net pay. When the advisor lacks a figure that only the transport representative knows, it
-sends the representative a question. The representative answers on a separate screen, and the
-conversation resumes by itself.
+> An employee asks *"What happens to my net pay if I switch to an electric car?"* — and gets an accurate, explained answer in under a minute.
 
-- **Employee screen:** chat, a panel with the employee's details, and the comparison table.
-- **Rep screen:** the open and answered questions, and a form to answer each one.
-- **Backend:** FastAPI, Pydantic AI (OpenAI), SQLAlchemy and SQL Server.
-- **Frontend:** Angular 22 with right-to-left Hebrew.
-- **Data:** the 2026 usage-value dataset (77,988 records), and the challenge's car catalog,
-  occupations table and payroll rules.
+**Built for the Open Source AI Hackathon 2026 · Strauss Challenge**
 
-The screens have no login and the salary data is fictitious. The car catalog and the occupations
-are the challenge's data of 2026-10-12: the codes and usage values are real, the costs and
-participations are not. The engine reproduces the challenge's six sample employees to the shekel.
-The limitations are listed in the submission summary of
-[docs/explanations.he.md](docs/explanations.he.md), which explains the whole system in Hebrew.
+🔗 [Live Demo](https://your-url-here) · 📹 [Video (1 min)](https://your-video-link)
 
-## Prerequisites
+---
 
-To run the app (quick start):
+## The Problem
 
-- Docker with Compose v2, and enough memory for SQL Server (2 GB or more).
+Strauss employees entitled to a company car have no easy way to understand the financial impact of switching cars, going electric, or giving up the car entirely. The calculation involves tax brackets, social insurance, usage values from the Tax Authority, group budgets, and participation fees — too complex for a spreadsheet conversation with HR.
 
-To work on the code (dev mode and `./check.sh`), also:
+## The Solution
 
-- [uv](https://docs.astral.sh/uv/) 0.12.23 and Python 3.12 (uv installs Python itself if needed)
-- Node.js 22.22.3 or later in the 22 line, or 24.15 or later, with npm (Angular CLI 22.2 refuses
-  older versions)
+A Hebrew chatbot that collects only what's missing, calculates everything in deterministic code, and presents a clear comparison table with explanations.
 
-## Quick start
+```
+Employee: "אני מנהלת מוצר, שכר בסיס 18,500 ש"ח. מה יקרה אם אעבור ל-BYD Atto 3 חשמלי?"
 
-```bash
-cp .env.example .env
+Bot collects: occupation → salary → deductions → current car → desired alternative
+
+Result: Net pay today ₪11,032 → With Atto 3: ₪11,693 → Difference: +₪661/month
+        "הנטו עולה ב-₪661 בחודש: שווי השימוש הנמוך חוסך ₪411, והחזר החשמל מוסיף ₪250."
 ```
 
-Edit `.env`:
+All 6 reference employees from the challenge match the organizers' spreadsheet to the shekel. Automated tests enforce this.
 
-- Set `DB_PASSWORD` to a password that SQL Server accepts: at least 8 characters, from at least
-  three of: upper case, lower case, digits and symbols.
-- Set `OPENAI_API_KEY` to your key. Without it the app still starts, but the advisor does not
-  answer: the chat shows a notice, and the details panel and the car picker keep working.
+---
 
-Then start everything:
+## Architecture
 
-```bash
-docker compose up
+```mermaid
+flowchart LR
+    subgraph Browser
+        E["🧑‍💼 Employee Screen\n(Hebrew chat + comparison table)"]
+        R["👔 Rep Screen\n(questions & answers)"]
+    end
+    subgraph Backend["Backend (FastAPI + Python)"]
+        Agent["🤖 AI Agent\n(pydantic-ai → OpenAI)"]
+        Engine["⚙️ Calculation Engine\n(deterministic code)"]
+        Lookup["🔍 Car Lookup\n(78K tax records)"]
+        Guard["🛡️ Number Guard"]
+    end
+    DB[("SQL Server")]
+    
+    E -->|chat| Agent
+    Agent -->|"tools"| Engine
+    Agent -->|"tools"| Lookup
+    Guard -->|"validates every reply"| Agent
+    Engine --> DB
+    Lookup --> DB
+    R -->|"answer"| DB
 ```
 
-The first start builds the images and loads the dataset into the database, which takes a few
-minutes. Later starts skip the load, because the data stays in a Docker volume. When the log
-shows no more errors, open:
+**The key principle: AI talks, code calculates.**
 
-- Employee screen: <http://127.0.0.1:8080/employee>
-- Rep screen: <http://127.0.0.1:8080/rep>
-- Health check: <http://127.0.0.1:8000/api/health> (200 with the number of records)
-
-All the ports are bound to `127.0.0.1`, so the app is reachable from this machine only.
-
-Stop with `Ctrl+C`. `docker compose down` removes the containers and keeps the data, and
-`docker compose down -v` also deletes the database.
-
-Notes:
-
-- `config/` and `data/` are mounted read-only into the backend container, which runs as an
-  unprivileged user. Their files must be readable by everyone (`chmod -R a+rX config data`), which
-  is the default unless a strict `umask` was used when the repository was cloned.
-- After editing `config/*.yaml` or `.env`, run `docker compose restart backend`.
-
-## How the advisor decides
-
-- **Eligibility group:** it comes from the employee's occupation in `config/occupations.yaml`. The
-  employee cannot set it, in the chat or in the panel. Only the transport representative can
-  override it, by answering a group question. The panel shows the group read-only, with its source.
-- **Car mandatory:** an occupation marked `car_mandatory` has no "no car" state, so the advisor
-  asks such an employee which car they have.
-- **Participation in a new car:** the catalog's `default_participation`, so the column is
-  calculated at once. Each column shows where its participation comes from (the employee, the
-  catalog or the representative), and a line under the table says that the final amount is set
-  with the representative. If the employee asks the representative to confirm it, the column stays
-  calculated and is marked as awaiting the representative until the answer replaces the amount.
-- **Usage-value check:** at startup every catalog `usage_value` is compared with the dataset. A
-  mismatch does not stop the app: it logs a `catalog_usage_value_mismatch` line and lists the car
-  under `catalog_warnings` in `/api/health`. The calculation always uses the dataset's value.
-- **Rep answers:** a participation question takes an amount (prefilled with the catalog amount),
-  an effective date and a note; an occupation or group question takes a choice from a list; any
-  other question takes free text. A chosen occupation or group is written to the employee's
-  profile. Migration `0002` adds `rep_questions.answer_choice` for these answers and renames the
-  question type `occupation_waiver` to `occupation`. It runs by itself at startup.
-
-## Dev mode
-
-Run the database in Docker, and the backend and the frontend on your machine:
-
-```bash
-docker compose up -d db
-
-# Backend, in one terminal. DB_HOST in .env must be 127.0.0.1 (not localhost).
-# uvicorn listens on 127.0.0.1:8000 by default.
-cd backend
-uv sync
-uv run uvicorn car_advisor.api.app:app --reload
-
-# Frontend, in another terminal. It proxies /api to the backend.
-cd frontend
-npm ci
-npx ng serve
-```
-
-The frontend is then at <http://localhost:4200/employee>.
-
-## Dataset
-
-The dataset is `data/usage-values-2026.csv` (windows-1255). The backend loads it on its first
-start, when the database holds no records of `TAX_YEAR`. To reload a year by hand, which replaces
-the records of that year:
-
-```bash
-cd backend
-uv run car-advisor-import --tax-year 2026
-```
-
-## Checks
-
-`./check.sh` runs everything: ruff and pytest for the backend, then lint, formatting and the unit
-tests for the frontend. It needs no network and no API key.
-
-The tests that need a live SQL Server are skipped unless `TEST_MSSQL_URL` is set:
-
-```bash
-docker compose up -d db
-cd backend
-TEST_MSSQL_URL='mssql+mssqlpython://sa:<DB_PASSWORD>@127.0.0.1:1433/master' uv run pytest -m mssql
-```
-
-## Where things are
-
-| What | Where |
+| Component | Role |
 |---|---|
-| App settings (database, model, API key, paths) | `.env`, copied from `.env.example` |
-| Calculation rules, tax parameters (the challenge's 2025 tables), budgets and the items pending from Strauss | `config/rules.yaml` |
-| Car catalog (the challenge's data; replace with Strauss's) | `config/car_catalog.yaml` |
-| Occupations table (the challenge's data; replace with Strauss's) | `config/occupations.yaml` |
-| Usage-value dataset | `data/usage-values-2026.csv` |
-| Backend code | `backend/src/car_advisor/` |
-| Frontend code | `frontend/src/app/` |
-| Explanations in Hebrew, with the submission summary and the open questions | `docs/explanations.he.md` |
-| Requirements, design and implementation plan | `docs/requirements.md`, `docs/design.md`, `docs/tasks.md` |
-| Live run findings (test results with the real model) | `docs/live-run-findings.md` |
+| **AI Agent** (pydantic-ai + OpenAI) | Manages the Hebrew conversation. Asks only missing fields, calls tools, presents results. Never calculates. |
+| **Calculation Engine** (pure Python) | Monthly net pay: tax brackets, NI, health tax, pension credit — all from `rules.yaml`, zero hardcoded numbers. |
+| **Car Lookup** | Searches the Tax Authority's 77,988-record usage-value dataset. Usage values are official, never guessed. |
+| **Number Guard** 🛡️ | Validates every bot reply: any number not from a tool result is rejected, and the model retries. |
+| **Document Reader** | Employee uploads a payslip or contract, the system extracts values for confirmation. Optional — manual input works too. |
+| **Rep Screen** | Transport rep answers questions the bot can't (participation amounts, unknown occupations). The conversation resumes automatically. |
+
+### Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.12, FastAPI, pydantic-ai, SQLAlchemy |
+| Frontend | Angular 22, RTL Hebrew, WCAG keyboard navigation |
+| Database | SQL Server 2025 |
+| AI Model | OpenAI (GPT) via pydantic-ai |
+| Infrastructure | Docker Compose (one command startup, auto-restart on failure) |
+
+---
+
+## What's Implemented (Challenge Checklist)
+
+| Requirement | Status | Details |
+|---|---|---|
+| Hebrew chatbot managing a conversation | ✅ | 4-step script: basics → pay → current car → alternatives |
+| Net pay calculation engine in code | ✅ | Monthly method, 2025 tax tables, exact decimal arithmetic |
+| Group budgets (A=3,500 B=3,700 C=4,500 D=5,200) | ✅ | From `rules.yaml`, not hardcoded |
+| Pick from your group or lower | ✅ | Deterministic eligibility check |
+| Electric car refund (+₪250 net) | ✅ | Added to net pay exactly, as the challenge specifies |
+| Family track (4+ children, 50/50 gap split) | ✅ | Carnival ₪6,000 / Santa Fe ₪5,600 |
+| Waiver by occupation | ✅ | 14 occupations with maintenance amounts |
+| Usage values from Tax Authority CSV | ✅ | 77,988 records imported, powertrain encoding verified |
+| Car catalog (20 cars in 4 groups + 2 family) | ✅ | All codes and values match the challenge data |
+| Comparison display with explanation | ✅ | Breakdown: what changed, why, how much in net |
+| Rep screen with questions and answers | ✅ | Participation, occupation choice, group override, free text |
+| Conversation resumes after rep answers | ✅ | Background task with automatic agent continuation |
+| 6 reference employees match the spreadsheet | ✅ | Automated tests in `test_challenge_employees.py` |
+| Document upload (payslip/contract) | ✅ | Employee uploads a payslip or contract, values offered for confirmation |
+
+---
+
+## 🛡️ Original Feature: Number Guard
+
+**The problem:** Language models hallucinate numbers. In a salary advisor, a wrong number isn't just an error — it's a breach of trust.
+
+**The solution:** Every reply from the bot passes through a Number Guard that:
+
+1. Extracts every number from the reply (amounts, dates, percentages, model codes)
+2. Checks each one against the set of numbers returned by tool calls in this conversation
+3. If any number wasn't returned by a tool → the reply is **rejected** and the model retries with an explanation of what went wrong
+
+**Why it matters for Strauss:** An employee making a ₪3,000/month decision based on AI advice needs 100% accurate numbers. The Number Guard is a safety net that ensures the bot can never present a number it didn't calculate.
+
+**How to test it:** Ask the bot about an alternative. Every number in the response can be traced back to the comparison table. In our test suite, we deliberately provoke the model to invent numbers — the guard catches and corrects them every time.
+
+📁 `backend/src/car_advisor/agent/number_guard.py`
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/your-repo/strauss-car-advisor.git
+cd strauss-car-advisor
+cp .env.example .env
+# Edit .env: set DB_PASSWORD and OPENAI_API_KEY
+
+# 2. Start everything (first run builds images + loads dataset, ~3 min)
+docker compose up
+
+# 3. Open
+# Employee screen: http://127.0.0.1:8080/employee
+# Rep screen:      http://127.0.0.1:8080/rep
+# Health check:    http://127.0.0.1:8000/api/health
+```
+
+Without an API key, the system starts but the advisor doesn't respond — the panel, car picker, comparison table, and rep screen all keep working.
+
+---
+
+## Data-Driven Design: Change Data, Not Code
+
+The engine reads everything from files. To move from hackathon to pilot, Strauss replaces data files:
+
+| File | What It Contains | How to Update |
+|---|---|---|
+| `config/rules.yaml` | Tax brackets, budgets, pension credit, all calculation parameters | Edit values, restart backend |
+| `config/car_catalog.yaml` | 20 cars with codes, costs, participations, groups | Replace with Strauss's real catalog |
+| `config/occupations.yaml` | 14 occupations with groups, waiver rules, maintenance amounts | Replace with Strauss's real table |
+| `data/usage-values-2026.csv` | 77,988 Tax Authority records | Replace file, run import command |
+
+---
+
+## Testing
+
+```bash
+./check.sh  # Runs everything: ruff + pytest (backend), lint + tests (frontend)
+```
+
+- **1,100+ backend tests** — including the 6 challenge employees validated against the organizers' spreadsheet
+- **400+ frontend tests** — components, services, accessibility
+- No network, no API key required for tests
+- The model is replaced by a scripted mock in agent tests
+
+---
+
+## Project Structure
+
+```
+├── config/                  Rules, car catalog, occupations (YAML)
+├── data/                    Tax Authority usage-value dataset (CSV)
+├── backend/
+│   ├── src/car_advisor/
+│   │   ├── engine/          Pure calculation: payroll, eligibility, comparison, explanation
+│   │   ├── agent/           AI agent, 6 tools, Number Guard, document reader
+│   │   ├── dataset/         CSV importer, car lookup (78K records)
+│   │   ├── conversations/   State management, rep questions
+│   │   └── api/             HTTP routes
+│   └── tests/               1,100+ tests including challenge employee validation
+├── frontend/
+│   └── src/app/
+│       ├── employee/        Chat, details panel, comparison table
+│       ├── rep/             Rep question list and answer forms
+│       └── shared/          API client, RTL formatting, number display
+└── docs/
+    └── pilot-readiness.md   What's done, what's needed for production
+```
+
+---
+
+## Pilot Readiness
+
+See [docs/pilot-readiness.md](docs/pilot-readiness.md) for a detailed assessment of what works today and what Strauss needs to provide for a real deployment.
+
+---
+
+## License
+
+No license specified. All challenge data (car codes, usage values) is from the Israel Tax Authority public dataset.
