@@ -4,7 +4,7 @@
 
 **Built for the Open Source AI Hackathon 2026 · Strauss Challenge**
 
-🔗 [Live Demo](https://your-url-here) · 📹 [Video (1 min)](https://your-video-link)
+🔗 [Live Demo — Employee](http://34.22.142.208:8080/employee) · [Rep Screen](http://34.22.142.208:8080/rep)
 
 ---
 
@@ -120,7 +120,7 @@ flowchart LR
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/your-repo/strauss-car-advisor.git
+git clone https://github.com/MalkaGreenfeld/strauss-car-advisor.git
 cd strauss-car-advisor
 cp .env.example .env
 # Edit .env: set DB_PASSWORD and OPENAI_API_KEY
