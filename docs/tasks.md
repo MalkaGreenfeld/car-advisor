@@ -12,7 +12,7 @@ Rules for every task:
 - Code, identifiers, comments, logs and commit messages are in English. Hebrew appears only in UI copy, bot replies, user-facing error messages and `docs/explanations.he.md`. Backend Hebrew lives in `car_advisor/engine/copy_he.py`, and frontend Hebrew lives in the `*.copy.ts` files. Groups are `A`-`D` in code and א-ד in the UI.
 - Keep data, rules config, pure engine, agent tools, API and UI in separate modules, and follow the design's module dependency table. Build nothing outside the design's scope.
 - Tests never call live OpenAI and never need network access. Each property test uses the shared Hypothesis profile, starts with `# Feature: strauss-car-advisor, Property <n>: <title>`, and puts the strategies it needs in `tests/strategies.py`.
-- Create no git commits unless the user asks.
+- Follow the git and GitHub workflow defined in `.kiro/steering/git-workflow.md`. Never commit, push, or create branches without explicit user approval.
 
 Optional tasks are marked `*`. Only two kinds are optional: Requirement 13 (document upload) and property-based tests. Unit tests, including the challenge rule examples, are required.
 
