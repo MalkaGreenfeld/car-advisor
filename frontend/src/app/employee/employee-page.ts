@@ -1,5 +1,14 @@
-import { Component, computed, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
-import { Router } from '@angular/router';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 
 import { ApiClient, ApiError } from '../shared/api';
 import { sharedCopy } from '../shared/shared.copy';
@@ -28,7 +37,14 @@ const TRACKED_FIELDS = [
 
 @Component({
   selector: 'app-employee-page',
-  imports: [Chat, ComparisonSummary, ConfirmFormComponent, MyDetails, UploadButtonComponent],
+  imports: [
+    Chat,
+    ComparisonSummary,
+    ConfirmFormComponent,
+    MyDetails,
+    RouterLink,
+    UploadButtonComponent,
+  ],
   providers: [EmployeeStore],
   templateUrl: './employee-page.html',
   styleUrl: './employee-page.scss',

@@ -1,6 +1,7 @@
 export const repCopy = {
   page: {
     title: 'שאלות לנציג התחבורה',
+    home: 'חזרה לדף הבית',
     refresh: 'רענון',
     retry: 'נסו שוב',
   },

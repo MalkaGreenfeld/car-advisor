@@ -1,4 +1,5 @@
 import { Component, computed, DestroyRef, inject, Injector, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { ApiClient, ApiError } from '../shared/api';
 import { RepQuestionStatus, RepQuestionView } from '../shared/api-models';
@@ -27,7 +28,7 @@ function inDisplayOrder(questions: readonly RepQuestionView[]): RepQuestionView[
 
 @Component({
   selector: 'app-rep-page',
-  imports: [RepQuestion],
+  imports: [RepQuestion, RouterLink],
   templateUrl: './rep-page.html',
   styleUrl: './rep-page.scss',
 })

@@ -2,6 +2,7 @@ export const employeeCopy = {
   newConversationLabel: '+ שיחה חדשה',
   page: {
     title: 'יועץ הרכב',
+    home: 'חזרה לדף הבית',
     newConversation: 'שיחה חדשה',
     retry: 'נסו שוב',
     notFound: 'השיחה לא נמצאה.',

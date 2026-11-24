@@ -1,0 +1,19 @@
+<main class="landing">
+  <header class="landing-header">
+    <span class="landing-icon" aria-hidden="true">🚗</span>
+    <h1>{{ copy.title }}</h1>
+    <p class="landing-subtitle">{{ copy.subtitle }}</p>
+  </header>
+
+  <nav class="role-cards" aria-label="{{ copy.subtitle }}">
+    <a class="role-card" routerLink="/employee">
+      <h2>{{ copy.employee.title }}</h2>
+      <p>{{ copy.employee.description }}</p>
+    </a>
+
+    <a class="role-card" routerLink="/rep">
+      <h2>{{ copy.rep.title }}</h2>
+      <p>{{ copy.rep.description }}</p>
+    </a>
+  </nav>
+</main>

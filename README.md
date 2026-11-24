@@ -4,7 +4,7 @@
 
 **Built for the Open Source AI Hackathon 2026 · Strauss Challenge**
 
-🔗 [Live Demo — Employee](http://34.22.142.208:8080/employee) · [Rep Screen](http://34.22.142.208:8080/rep)
+🔗 [Live Demo](http://34.22.142.208:8080/)
 
 ---
 
@@ -129,9 +129,8 @@ cp .env.example .env
 docker compose up
 
 # 3. Open
-# Employee screen: http://127.0.0.1:8080/employee
-# Rep screen:      http://127.0.0.1:8080/rep
-# Health check:    http://127.0.0.1:8000/api/health
+# App:          http://127.0.0.1:8080/
+# Health check: http://127.0.0.1:8000/api/health
 ```
 
 Without an API key, the system starts but the advisor doesn't respond — the panel, car picker, comparison table, and rep screen all keep working.

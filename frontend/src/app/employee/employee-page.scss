@@ -44,6 +44,23 @@ $panel-width: 340px;
   font-size: 1.25rem;
 }
 
+.brand-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-link {
+  font-size: 0.8125rem;
+  color: rgb(255 255 255 / 0.75);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: #fff;
+  }
+}
+
 .new-conversation {
   background: rgb(255 255 255 / 0.15) !important;
   color: #fff !important;

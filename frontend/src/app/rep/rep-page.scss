@@ -14,6 +14,16 @@
   border-block-end: var(--border);
 }
 
+.header-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-link {
+  font-size: 0.8125rem;
+}
+
 .status-message,
 .update-failed,
 .confirmation {

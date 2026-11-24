@@ -1,6 +1,9 @@
 <main class="rep-page">
   <header class="page-header">
-    <h1>{{ copy.page.title }}</h1>
+    <div class="header-title">
+      <a routerLink="/" class="home-link">{{ copy.page.home }}</a>
+      <h1>{{ copy.page.title }}</h1>
+    </div>
     <button type="button" (click)="reload()">{{ copy.page.refresh }}</button>
   </header>
 
